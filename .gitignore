@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+# HuaNiu / 华小牛 —— 本地优先的视觉智能体
+# 保持仓库干净：所有"能重新生成的东西"都不入库
+# ---------------------------------------------------------------------------
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.ipynb_checkpoints
+
+# ===== Node =====
+node_modules/
+dist/
+.vite/
+*.local
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== 模型权重（体积大，改为脚本下载） =====
+models/
+*.gguf
+*.pt
+*.onnx
+*.engine
+*.safetensors
+*.bin
+*.pth
+
+# ===== 数据集 =====
+data/
+datasets/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# ===== 训练产物 =====
+runs/
+*.log
+wandb/
+ultralytics_runs/
+
+# ===== 临时下载 =====
+_downloads/
+tmp/
+temp/
+*.tmp
+
+# ===== 环境变量与密钥 =====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ===== 编辑器与系统 =====
+.vscode/*
+!.vscode/settings.json.example
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 运行期缓存 =====
+*.db
+*.sqlite3
+__logs__/
