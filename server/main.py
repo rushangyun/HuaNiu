@@ -36,11 +36,12 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.agent.runtime import AgentRuntime
 from app.agent.tools import build_registry
-from app.api import chat, health
+from app.api import chat, health, vision
 from app.core.config import settings
 from app.core.container import Container
 from app.llm.provider import OpenAICompatProvider
 from app.vision.detector import Detector
+from app.vision.stream import DetectionStream
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,17 +59,20 @@ def build_container() -> Container:
         detector  （延迟加载 torch，构造时不占显存）
         registry  （需要 detector 才能注册视觉工具）
         runtime   （需要 provider + registry）
+        stream    （需要 detector；构造时不开摄像头，有人看才开）
     """
     provider = OpenAICompatProvider()
     detector = Detector()
     registry = build_registry(detector)
     runtime = AgentRuntime(provider, registry)
+    stream = DetectionStream(detector)
     return Container(
         settings=settings,
         provider=provider,
         registry=registry,
         runtime=runtime,
         detector=detector,
+        stream=stream,
     )
 
 
@@ -113,6 +117,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
+    app.include_router(vision.router, prefix="/api")
     return app
 
 

@@ -46,9 +46,24 @@ class Event:
     type: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        """序列化。空值字段不发给前端，减少噪音。"""
+        """序列化。空值字段不发给前端，减少噪音。
+
+        注意：**0 不是空值**。第一版用 `v not in ("", 0, ...)` 一把梭，
+        结果 VisionStatsEvent 的 fps=0、object_count=0 全被过滤掉，
+        前端收到一个光秃秃的 {"type":"vision_stats"}，什么数字都没有。
+        对统计类事件来说 0 是有效信息（"现在没检测到东西"），必须发。
+        """
         data = asdict(self)  # type: ignore[arg-type]
-        return {k: v for k, v in data.items() if v not in ("", 0, {}, [], None) or k == "type"}
+        out: dict[str, Any] = {}
+        for key, value in data.items():
+            if key == "type":
+                out[key] = value
+                continue
+            # 只过滤真正的"没有值"：None、空字符串、空容器
+            if value is None or value == "" or value == {} or value == []:
+                continue
+            out[key] = value
+        return out
 
 
 @dataclass

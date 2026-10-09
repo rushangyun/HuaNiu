@@ -80,6 +80,45 @@ export interface HealthStatus {
   agent: { tools: string[]; max_rounds: number };
 }
 
+/**
+ * 订阅实时检测的统计信息。
+ *
+ * 走的是和对话完全相同的 SSE + 事件契约，
+ * 所以解析逻辑复用同一套，前端不需要为视觉单独学一种协议。
+ */
+export async function* streamStats(
+  signal?: AbortSignal
+): AsyncGenerator<AgentEvent> {
+  const resp = await fetch("/api/vision/stats", { signal });
+  if (!resp.ok) throw new Error(`订阅统计失败：${resp.status}`);
+  if (!resp.body) throw new Error("后端没有返回响应体");
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+
+    for (const frame of frames) {
+      const line = frame.trim();
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === STREAM_END) continue;
+      try {
+        yield JSON.parse(payload) as AgentEvent;
+      } catch {
+        console.warn("[stats] 解析失败：", payload.slice(0, 120));
+      }
+    }
+  }
+}
+
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthStatus> {
   const resp = await fetch("/api/health", { signal });
   if (!resp.ok) throw new Error(`健康检查失败：${resp.status}`);

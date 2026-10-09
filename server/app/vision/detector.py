@@ -36,6 +36,10 @@ class Detector:
         device: str | None = None,
     ) -> None:
         self.model_path = Path(model_path or settings.vision_model)
+        # 自己训的 VOC 权重还没出来时，退回 COCO 预训练权重。
+        # 这样训练跑着的这七八个小时里，实时检测照样能演示——
+        # 识别类别从「VOC 20 类」变成「COCO 80 类」，但整条链路完全一致。
+        self.fallback_path = Path(settings.vision_fallback_model)
         self.conf = settings.vision_conf if conf is None else conf
         self.imgsz = imgsz or settings.vision_imgsz
         self.device = device or settings.vision_device
@@ -47,16 +51,38 @@ class Detector:
     # ------------------------------------------------------------------ #
 
     @property
+    def weights_path(self) -> Path:
+        """实际要加载的权重：优先自己训的，没有就用预训练的。"""
+        if self.model_path.is_file():
+            return self.model_path
+        if self.fallback_path.is_file():
+            return self.fallback_path
+        return self.model_path
+
+    @property
+    def is_fallback(self) -> bool:
+        """当前用的是不是预训练权重。前端可以据此提示用户。"""
+        return not self.model_path.is_file() and self.fallback_path.is_file()
+
+    @property
     def available(self) -> bool:
-        return self.model_path.is_file()
+        return self.weights_path.is_file()
 
     @property
     def reason(self) -> str:
         if not self.available:
-            return f"权重文件不存在（{self.model_path}），先跑 training/train.py 完成训练"
+            return (
+                f"权重文件不存在（{self.model_path}），"
+                "先跑 training/train.py 完成训练"
+            )
         if self._load_error:
             return f"模型加载失败：{self._load_error}"
-        return "就绪"
+        if self.is_fallback:
+            return (
+                f"暂用预训练权重 {self.fallback_path.name}（COCO 80 类）；"
+                "VOC 模型训好后自动切换"
+            )
+        return "就绪（自训练 VOC 模型）"
 
     @property
     def loaded(self) -> bool:
@@ -74,8 +100,9 @@ class Detector:
             raise RuntimeError(self._load_error) from exc
 
         try:
-            self._model = YOLO(str(self.model_path))
-            logger.info("YOLO 权重已加载：%s", self.model_path)
+            weights = self.weights_path
+            self._model = YOLO(str(weights))
+            logger.info("YOLO 权重已加载：%s", weights)
         except Exception as exc:  # noqa: BLE001
             self._load_error = str(exc)
             raise
@@ -145,6 +172,49 @@ class Detector:
         """异步检测入口。"""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._detect_sync, source)
+
+    # ------------------------------------------------------------------ #
+    # 带框图像（实时推流用）
+    # ------------------------------------------------------------------ #
+
+    def _detect_annotated_sync(self, frame: Any) -> tuple[Any, dict[str, Any]]:
+        """检测并顺带把框画到图上。
+
+        为什么要单独一个方法而不是复用 _detect_sync：
+        ultralytics 的 results.plot() 能画出比手写 cv2.rectangle 好看得多的
+        标注（自动配色、自动字号、自动压标签），但它必须在拿到 Results 对象的
+        当场调用。所以这里不能走"只返回 dict"那条路。
+        """
+        self._ensure_model()
+        device = self._resolve_device()
+
+        started = time.perf_counter()
+        results = self._model.predict(
+            source=frame, conf=self.conf, imgsz=self.imgsz,
+            device=device, verbose=False,
+        )
+        elapsed_ms = (time.perf_counter() - started) * 1000
+
+        result = results[0]
+        annotated = result.plot()  # 返回 BGR ndarray
+
+        counts: dict[str, int] = {}
+        if result.boxes is not None:
+            for box in result.boxes:
+                label = result.names.get(int(box.cls.item()), "?")
+                counts[label] = counts.get(label, 0) + 1
+
+        return annotated, {
+            "counts": counts,
+            "object_count": sum(counts.values()),
+            "elapsed_ms": elapsed_ms,
+            "device": device,
+        }
+
+    async def detect_annotated(self, frame: Any) -> tuple[Any, dict[str, Any]]:
+        """异步版本：返回 (画好框的图像, 统计信息)。"""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._detect_annotated_sync, frame)
 
     async def detect_path_or_camera(self, image_path: str | None = None) -> dict[str, Any]:
         """传路径就检测图片，不传就抓一帧摄像头画面。"""

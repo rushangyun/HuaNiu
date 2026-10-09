@@ -11,6 +11,7 @@ from fastapi import Request
 from ..agent.runtime import AgentRuntime
 from ..core.container import Container
 from ..vision.detector import Detector
+from ..vision.stream import DetectionStream
 
 
 def get_container(request: Request) -> Container:
@@ -23,3 +24,7 @@ def get_runtime(request: Request) -> AgentRuntime:
 
 def get_detector(request: Request) -> Detector:
     return get_container(request).detector
+
+
+def get_stream(request: Request) -> DetectionStream:
+    return get_container(request).stream

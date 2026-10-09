@@ -44,7 +44,11 @@ class Settings(BaseSettings):
     max_history_turns: int = 12  # 带进上下文的历史轮数。本地小模型上下文有限，不能全塞
 
     # ---------------- 视觉 ----------------
+    # 首选：自己训的 VOC 权重。训好后 train.py 会自动复制到这里
     vision_model: str = str(ROOT / "models" / "yolo" / "best.pt")
+    # 兜底：COCO 预训练权重。best.pt 还不存在时用它，
+    # 这样训练跑着的几小时里实时检测也能演示（类别变成 COCO 80 类）
+    vision_fallback_model: str = str(ROOT / "models" / "yolo" / "yolov8n.pt")
     vision_conf: float = 0.25
     vision_imgsz: int = 640
     vision_device: str = "cuda"  # 显存不足时改成 cpu

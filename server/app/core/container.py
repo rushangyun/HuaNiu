@@ -21,6 +21,7 @@ from ..agent.runtime import AgentRuntime
 from ..agent.tools.base import ToolRegistry
 from ..llm.provider import OpenAICompatProvider
 from ..vision.detector import Detector
+from ..vision.stream import DetectionStream
 from .config import Settings
 
 
@@ -33,7 +34,13 @@ class Container:
     registry: ToolRegistry
     runtime: AgentRuntime
     detector: Detector
+    stream: DetectionStream
 
     async def aclose(self) -> None:
-        """进程退出时统一收尾，比如关掉 httpx 连接池。"""
+        """进程退出时统一收尾。
+
+        顺序有讲究：先停检测流（它会占着摄像头和 GPU），
+        再关模型服务的连接池。
+        """
+        await self.stream.stop()
         await self.provider.aclose()
