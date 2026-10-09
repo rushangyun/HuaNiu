@@ -10,8 +10,10 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 项目根目录：server/app/config.py -> parents[2]
-ROOT = Path(__file__).resolve().parents[2]
+# 项目根目录：server/app/core/config.py -> core/app/server/根，所以是 parents[3]
+# 这个文件一旦搬家，这个数字必须跟着改，否则所有路径会静默错位。
+# （踩过一次：从 app/ 移到 app/core/ 忘改，视觉权重路径变成 server/models/...）
+ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):

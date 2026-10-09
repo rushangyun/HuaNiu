@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from ..config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 

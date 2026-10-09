@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .registry import ToolRegistry
+from .tools.base import ToolRegistry
 
 _IDENTITY = """你是「华小牛」（HuaNiu），一个完全运行在用户自己电脑上的 AI 助手。
 
