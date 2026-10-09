@@ -1,0 +1,38 @@
+# PASCAL VOC 数据集配置（YOLO 训练用）
+#
+# 数据由 training/prepare_dataset.py 生成，**不走 ultralytics 的自动下载**：
+#   1. 它的 safe_download 走 github.com，本机代理环境下会报 SSLCertVerificationError
+#   2. 自己的划分规则自己说了算，讲得清楚也改得动
+#
+# 划分（与官方数字对齐，可核对）：
+#   train = VOC2007 trainval(5011) + VOC2012 trainval(11540) = 16551
+#   val   = VOC2007 test(4952)
+#
+# 原文件基于 ultralytics VOC.yaml（AGPL-3.0），仅改 path / train / val 与注释。
+
+path: data/VOC  # 相对项目根目录
+train: images/train
+val: images/val
+
+# 20 类，顺序不能动——改顺序等于把所有标签重新编号
+names:
+  0: aeroplane
+  1: bicycle
+  2: bird
+  3: boat
+  4: bottle
+  5: bus
+  6: car
+  7: cat
+  8: chair
+  9: cow
+  10: diningtable
+  11: dog
+  12: horse
+  13: motorbike
+  14: person
+  15: pottedplant
+  16: sheep
+  17: sofa
+  18: train
+  19: tvmonitor

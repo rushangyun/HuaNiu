@@ -1,0 +1,28 @@
+# 华小牛后端依赖（Python 3.13 实测通过）
+#
+# ⚠️ torch 不在这里：必须用 CUDA 专属源单独装，否则 pip 会给你 CPU 版。
+#     装法见下面注释，一行都不能省。
+
+fastapi>=0.115
+uvicorn[standard]>=0.32
+httpx>=0.28
+pydantic-settings>=2.6
+
+# --- 视觉 ---
+ultralytics>=8.3
+opencv-python>=4.10
+
+# ---------------------------------------------------------------------------
+# torch（必须单独装，且不能给 PyPI 当备胎源）
+#
+# 本机是 RTX 5060 Laptop（sm_120 / Blackwell），实测可用组合：
+#
+#   pip install --index-url https://download.pytorch.org/whl/cu128 \
+#       "torch==2.11.0+cu128" "torchvision==0.26.0+cu128"
+#
+# 踩过的坑：
+#   1. 加 `--extra-index-url https://pypi.org/simple` 会让 pip 从 PyPI 挑
+#      版本更高的 CPU wheel，装完 torch.cuda.is_available() 直接是 False
+#   2. 装完务必验证：python -c "import torch; print(torch.cuda.is_available())"
+#      顺便看 wheel 大小，CUDA 版 2.5GB 左右，CPU 版只有 124MB
+# ---------------------------------------------------------------------------
