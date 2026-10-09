@@ -1,159 +1,117 @@
 # 华小牛 HuaNiu
 
-> 一个跑在你自己电脑上的视觉智能体：本地大模型 + 自建 Agent 运行时 + 实时视觉检测，全部装在一个 Web 应用里。
->
-> 人工智能协会创智部二面 · 实战部分
+一个**完全跑在你自己电脑上**的视觉智能体：本地大模型当大脑，自己训练的 YOLO 当眼睛，
+手写 Agent 运行时当身体，浏览器当脸。断网也能用，数据不出机器。
 
----
-
-## 一句话说明
-
-华小牛做的事很简单：**让一个完全跑在本地的模型，能看、能想、能动手。**
-
-- **能看** —— YOLO 实时检测摄像头画面
-- **能想** —— 本地部署的 Qwen2.5-7B，不经过任何云端
-- **能动手** —— 自建的 Agent 运行时，模型可以自己调用工具
-
-整套系统断网也能跑（模型权重在本地），数据不出本机。
-
----
-
-## 为什么这么选型
-
-面试要求里列了很多选项（Dify / n8n / 扣子、Electron / Tauri、小程序……）。
-我逐个权衡后**主动做减法**，理由如下：
-
-| 决策 | 选择 | 为什么放弃另一个 |
-| --- | --- | --- |
-| 智能体框架 | **手写 Agent 运行时** | Dify/n8n 要跑 Docker。本机只有 16GB 内存，实测空闲仅 6.5GB，Docker 全家桶会把机器拖垮。更重要的是——**自己写才能在面试时讲清每一环**，拖一个 Dify 出来只能说「我配了配」 |
-| 模型服务 | **Ollama**（OpenAI 兼容 API） | 它把 GGUF 加载、显存卸载、HTTP 服务都做好了，暴露的是标准 `/v1/chat/completions`。我的后端只依赖这个**标准协议**，哪天换成 vLLM / llama.cpp / 云端都不用改代码 |
-| 应用形态 | **Web（React + FastAPI）** | 一套后端同时承载对话流和视频流，展示效果最直接。桌面端留作后续 |
-| 模型权重来源 | **魔搭社区 ModelScope** | GitHub Release 下载慢，魔搭在国内快得多，且支持断点续传 |
-
-> 题目里那句「AI 会不断把事情变繁琐，而你要做减法」我理解为：**不要堆功能，要能说清每个东西为什么存在。**
-
----
-
-## 本机环境（实测）
-
-| 项目 | 实测值 | 约束 |
-| --- | --- | --- |
-| GPU | RTX 5060 Laptop **8GB** / CUDA 13.1 | 决定模型规模与训练 batch |
-| 内存 | **15.5 GB**（实测空闲仅 6.5GB） | ⚠️ 本项目最大的瓶颈 |
-| 磁盘 | C 盘 204GB / D 盘 520GB 可用 | 宽裕 |
-| 工具链 | git 2.55 / node 22 / python 3.13 | — |
-
-**这些数字不是摆设，它们直接决定了下面的每一个参数**：
-- 模型选 7B Q4_K_M（4.36GB）而不是更大的 —— 要留显存给 YOLO
-- 训练用 `yolov8n` + `imgsz=640` —— 8GB 显存的安全区
-- 不跑 Docker —— 内存不够
-
----
-
-## 架构
-
-```mermaid
-graph TB
-    subgraph 前端["Web 前端 (React + Vite)"]
-        UI["对话界面"]
-        CANVAS["实时检测画面"]
-    end
-
-    subgraph 后端["FastAPI 后端"]
-        AGENT["Agent 运行时<br/>上下文装配 / 工具循环 / 权限"]
-        TOOLS["工具注册表<br/>时间 · 计算 · 文件 · 视觉"]
-        VISION["视觉服务<br/>YOLO 推理 + MJPEG 推流"]
-    end
-
-    subgraph 本地模型["本地模型层"]
-        OLLAMA["Ollama<br/>Qwen2.5-7B-Instruct Q4_K_M<br/>OpenAI 兼容 API :11434"]
-    end
-
-    UI -->|SSE 流式| AGENT
-    CANVAS -->|MJPEG| VISION
-    AGENT -->|"工具调用请求"| TOOLS
-    AGENT -->|"/v1/chat/completions"| OLLAMA
-    TOOLS --> VISION
-    VISION -->|"检测结果"| TOOLS
-
-    style OLLAMA fill:#ffe6cc
-    style AGENT fill:#d5e8d4
-    style VISION fill:#dae8fc
-```
-
-**关键点：模型只是一个「可被替换的 provider」。**
-后端通过标准 OpenAI 协议调用它，所以本地 / 云端切换只需要改一个环境变量。
-
----
-
-## 目录结构
-
-```
-HuaNiu/
-├── README.md            你正在看的这个文件
-├── DEVLOG.md            工程日志：进度、卡点、当时的想法
-├── AI_USAGE.md          AI 使用情况说明（题目要求如实说明）
-├── docs/                分模块的详细文档
-├── scripts/             一键脚本（装环境 / 起服务）
-├── server/              Python 后端：Agent 运行时 + 视觉服务
-│   └── app/
-│       ├── agent/       Agent 主循环、工具注册、提示词装配
-│       ├── llm/         model provider 抽象（OpenAI 兼容协议）
-│       ├── vision/      YOLO 推理与视频流
-│       └── api/         HTTP 路由
-├── web/                 React 前端
-├── training/            YOLO 训练脚本与配置（独立于服务端）
-├── models/              模型权重（不入库，脚本下载）
-├── data/                数据集（不入库）
-└── runs/                训练产物（不入库）
-```
-
-**为什么训练和推理分开？** 训练是一次性实验行为，推理是线上服务行为。混在一起会让服务依赖训练库（torch），把后端变重。分开之后后端可以很轻，训练和推理只通过「权重文件」这个契约耦合。
+> 华南农业大学 · 人工智能协会创智部二面实战题
+> 设备：RTX 5060 Laptop 8GB / 16GB 内存 / Windows 11
 
 ---
 
 ## 快速开始
 
 ```bash
-# 1. 搭建环境（装 Ollama、拉模型、建虚拟环境、装依赖）
-./scripts/setup.ps1
+# 1. 后端依赖
+python -m venv .venv
+./.venv/Scripts/pip install -r requirements.txt
+./.venv/Scripts/pip install --index-url https://download.pytorch.org/whl/cu128 \
+    "torch==2.11.0+cu128" "torchvision==0.26.0+cu128"   # 必须用 CUDA 源，见文件内注释
 
-# 2. 启动（后端 :8000 + 前端 :5173）
-./scripts/dev.ps1
+# 2. 本地模型（Ollama）
+ollama pull qwen2.5:7b-instruct
+ollama serve
+
+# 3. 起后端  → http://127.0.0.1:8000/docs
+python server/main.py
+
+# 4. 起前端  → http://127.0.0.1:5173
+cd web && npm install && npm run dev
 ```
 
-浏览器打开 <http://localhost:5173>。
+改事件契约后要重新生成前端类型：
 
-> 详细的手动步骤见 [`docs/01-环境准备.md`](docs/01-环境准备.md)，脚本是这些步骤的封装，不是黑盒。
+```bash
+python scripts/gen_event_types.py
+```
 
----
+训练视觉模型（可选，约 7 小时；不训练对话也能用，只是"看不见"）：
 
-## 分模块说明
-
-| 模块 | 文档 | 状态 |
-| --- | --- | --- |
-| 本地大模型部署 | [docs/02-大模型部署.md](docs/02-大模型部署.md) | 进行中 |
-| 智能体运行时设计 | [docs/03-智能体设计.md](docs/03-智能体设计.md) | 待开始 |
-| YOLO 训练 | [docs/04-YOLO训练.md](docs/04-YOLO训练.md) | 待开始 |
-| Harness | [docs/05-Harness.md](docs/05-Harness.md) | 待开始 |
+```bash
+python training/prepare_dataset.py   # 下载已在 data/VOC 时会自动跳过
+python training/train.py --epochs 100
+```
 
 ---
 
-## 进度
+## 架构
 
-真实的进度和踩过的坑记在 [`DEVLOG.md`](DEVLOG.md)。
-**那里面会有失败和卡住的记录**，我刻意不删——面试要求记录「长时间因为什么而卡住进度」，日志只写好不看的部分是没价值的。
+```
+浏览器 (React)  ──只订阅事件──>  ┌──────────────────────────────┐
+                                │  server/                     │
+                                │   main.py  组合根（只做组装） │
+                                │     ↓ 注入                   │
+                                │   agent/   工具调用主循环     │
+                                │   llm/     OpenAI 兼容协议    │
+                                │   vision/  YOLO 推理          │
+                                │   transport/ SSE 推送         │
+                                │   api/     薄路由             │
+                                │   core/    契约 · 配置        │
+                                └──────────┬───────────────────┘
+                                           │ HTTP
+                                ┌──────────▼──────────┐
+                                │ Ollama  qwen2.5:7b  │
+                                └─────────────────────┘
+```
+
+**前后端唯一的耦合点**是 `server/app/core/events.py` 里的事件契约，
+TypeScript 类型由 `scripts/gen_event_types.py` 自动生成，不手抄、不漂移。
+
+后端只负责计算和推送，前端只负责组织和订阅——
+换模型、换框架、换前端，只要契约不变，两边各自独立替换。
 
 ---
 
-## 硬件部分
+## 目录
 
-目前手上没有单片机，第三部分先用 **Wokwi 在线仿真 + 串口协议模拟** 完成「AI 控制点灯」的闭环验证，协议层代码写好，真机上电即可复用。详见 `docs/06-硬件.md`。
+| 目录 | 说明 |
+|---|---|
+| [`server/`](server/README.md) | 后端：Agent 运行时、模型接入、视觉推理、SSE 推送 |
+| [`web/`](web/README.md) | 前端：React + Vite，浅色简洁 |
+| [`training/`](training/README.md) | 训练：数据集准备、YOLO 训练、实验产出 |
+| [`scripts/`](scripts/README.md) | 脚本：事件契约 → TS 类型生成 |
+
+根目录还有三份题目要求的说明文档：
+
+- [`DEVLOG.md`](DEVLOG.md) — 工程日志，含踩坑与卡住记录
+- [`AI_USAGE.md`](AI_USAGE.md) — AI 使用情况如实说明
+- [`PLAN.md`](PLAN.md) — 三天排期与架构决策
 
 ---
 
-## 许可与致谢
+## 现在能做什么
 
-- 模型权重来自 [魔搭社区](https://www.modelscope.cn/) 的 `lmstudio-community/Qwen2.5-7B-Instruct-GGUF`
-- 训练框架 [ultralytics](https://github.com/ultralytics/ultralytics)
-- 推理服务 [Ollama](https://github.com/ollama/ollama)
+对话时模型会自主调用工具，前端能看到它每一步在干什么：
+
+| 工具 | 作用 |
+|---|---|
+| `get_current_time` | 当前时间 |
+| `calculator` | 算数（AST 白名单求值，不是 `eval`） |
+| `get_device_info` | 本机硬件与显存 |
+| `list_dir` / `read_file` | 看工程结构、读文件（有沙箱，出不了工作区） |
+| `project_overview` | 一句话了解本项目 |
+| `vision_status` / `vision_detect` | 检测图片或摄像头画面里的物体（需先训练） |
+
+试试问：**「现在几点」**、**「算一下 12345 × 6789」**、**「这个项目是干什么的」**。
+
+---
+
+## 为什么没用 Docker / Dify / LangChain
+
+不是不想用，是**这台机器用不起**：
+
+- 内存 16GB，实测空闲只有 6.5GB。Docker Desktop + Dify 一套下去就见底了
+- Agent 主循环本身只有几十行，套框架等于给自己加一层黑盒，
+  出了问题还得去猜框架内部在干什么
+
+所以全部手写，代价是多写几百行，收益是每一行都讲得清。
+详见 [`PLAN.md`](PLAN.md) 的选型理由表。

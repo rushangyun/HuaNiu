@@ -206,3 +206,106 @@ if resp.status_code >= 400:
 - [ ] 实时检测接入 Web
 - [ ] Harness 原型
 - [ ] 文档与 git 规范收尾
+
+---
+
+## Day 0 傍晚（16:20–17:20）：分层重构 + 数据集 + 训练启动
+
+### 做了什么
+
+1. **后端分层重构完成**
+   - `config.py` 移进 `core/`，建 `core/{events,errors,container}.py`
+   - 工具按用途拆成 `tools/{base,system,filesystem,vision}.py`，
+     `build_registry()` 一处装配；删掉会和 `tools/` 包同名的旧 `tools.py`
+   - `runtime.py` 改成吐 `core.events` 里的 Event（原来自带一个 AgentEvent）
+   - 新建 `transport/sse.py`、`api/{deps,chat,health}.py`
+   - `server/main.py` 作组合根，**只做组装**，没有任何业务逻辑
+
+2. **VOC 数据集准备完成**
+   - curl 并行下三个 zip（绕开 ultralytics 的 SSL 问题），共 2.8GB
+   - `training/prepare_dataset.py` 解压 + 转 YOLO，**硬链接**省 2GB 磁盘
+   - 结果：train 16551 / val 4952，与官方数字完全一致，0 张跳过
+
+3. **训练启动**：yolov8n, imgsz 640, batch 16
+   - 显存占用 1.96GB，约 4.4 分钟/epoch（含验证）
+   - epoch 7 时 mAP50 ≈ 0.58，仍在上升
+
+4. **前端骨架完成**：Vite + React + TS，浅色简洁
+   - 事件契约自动生成 TS 类型（`scripts/gen_event_types.py`）
+   - 分层：`api/` 订阅 SSE，`hooks/` 事件→状态，`components/` 纯展示
+
+### 卡住的地方（按浪费的时间排序）
+
+**1. 改了配置却一直不生效 —— 40 分钟**
+
+把 `config.py` 从 `app/` 移到 `app/core/` 后，
+`ROOT = Path(__file__).resolve().parents[2]` 少了一层，
+`vision_model` 变成 `server/models/yolo/best.pt`（应为 `models/yolo/best.pt`）。
+
+修完再测，返回值**还是错的**。反复查了三遍配置代码都没问题——
+直接 `python -c` 打印 ROOT，发现配置本身是对的。
+
+真正的原因：`uvicorn reload=True` 会起父子两个进程，
+我 kill 掉的那个不是真正在监听的，**curl 一直打在旧进程上**。
+新进程其实压根没起来，日志里写着：
+
+```
+ERROR: [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000)
+```
+
+**教训：改完代码测出来还是老样子，先确认你测的到底是不是新进程。**
+看后台任务的日志，别只看 curl 的返回值。
+后来给 main.py 加了 `HUANIU_RELOAD=0` 开关，排查端口时关掉重载。
+
+**2. tools.py 和 tools/ 包同名 —— 差点埋雷**
+
+新建 `agent/tools/` 包时，旧的 `agent/tools.py` 还在。
+Python 里包优先于同名模块，不会报错，但 import 到哪个全看运气。
+删掉旧文件才安全。**建包之前先看看有没有同名模块。**
+
+**3. SSE 终止帧和 done 事件撞名**
+
+第一版流结束时发 `data: done`，而 `DoneEvent` 的 type 也是 `"done"`。
+前端根本分不清这是"结束"还是"一个 done 事件"。
+改成标准 `[DONE]` 并写进注释。
+
+**4. tool_start 每次发两条**
+
+流式阶段收到 `ToolCallDelta` 就发一次不带参数的 `tool_start`，
+拿到完整 `ChatResult` 后又发一次带参数的——前端收到两条，还得自己按名字去重。
+碎片比完整结果只早几十毫秒，不值得。
+改成只发一次，契约保持"一次调用 = 一个 tool_start"。
+
+**5. Vite 默认只监听 IPv6**
+
+`curl http://127.0.0.1:5173` 死活连不上，
+`netstat` 一看监听的是 `[::1]:5173`。
+在 `vite.config.ts` 里显式写 `host: "127.0.0.1"` 解决。
+
+**6. ultralytics 的两个小意外**（不影响结果，但会吓一跳）
+- AMP 检查要联网下载 `yolo26n.pt`，SSL 失败后跳过并自动设 `amp=True`。
+  不是错误，训练照常。
+- `project="runs/train"` 实际输出到 `runs/detect/runs/train/`（多一层）。
+  路径不干净但能用。
+
+### 端到端验证
+
+```
+POST /api/chat  "现在几点？顺便算一下 12345 × 6789"
+→ tool_start get_current_time
+→ tool_end     2026-10-09 16:36:55 星期五
+→ tool_start   calculator {"expression": "12345 * 6789"}
+→ tool_end     12345 * 6789 = 83810205
+→ round 2
+→ token...（流式输出）→ done
+```
+
+前端通过 Vite 代理访问 `/api/health` 正常，8 个工具全部注册。✓
+
+### 下一步
+
+- [ ] 训练跑完（预计 7 小时，明早看结果）
+- [ ] 实时检测推流（MJPEG）接入前端
+- [ ] Harness 自主实验闭环（读 result.json 做超参搜索）
+- [ ] 各模块 README 已补，根 README 启动命令已补
+- [ ] git 规范化提交 + 推 GitHub
