@@ -1,0 +1,275 @@
+/* 浅色简洁：只有一层背景、一层卡片，主色一个，靠留白和边框分组。
+   刻意不用渐变、不用大阴影——信息密度高的界面越素越好读。 */
+
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --text: #1f2329;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+  --primary: #3b6cf6;
+  --primary-soft: #eef3ff;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ---------- 布局 ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.topbar .sub {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.status-dots {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  background: var(--text-faint);
+}
+
+.dot.ok {
+  background: var(--success);
+}
+
+.dot.bad {
+  background: var(--danger);
+}
+
+/* ---------- 消息区 ---------- */
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.empty strong {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.msg.user {
+  align-items: flex-end;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg.user .bubble {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.bubble.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+/* 打字光标 */
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 2px;
+  background: var(--primary);
+  vertical-align: -2px;
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- 工具调用 ---------- */
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 78%;
+}
+
+.tool {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.tool-name {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tool-args,
+.tool-result {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.tool-result {
+  color: var(--text);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 8px;
+}
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- 输入区 ---------- */
+
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 18px;
+  border-top: 1px solid var(--border);
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  height: 44px;
+  padding: 11px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.composer textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.composer button {
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer button:disabled {
+  background: var(--border-strong);
+  cursor: not-allowed;
+}
+
+.composer button.ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
