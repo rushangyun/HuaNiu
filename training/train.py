@@ -64,6 +64,13 @@ class TrainConfig:
     name: str = "voc_yolov8n"
     exist_ok: bool = True      # 同名实验覆盖，方便 Harness 反复跑
 
+    # Harness 会指定这个路径：它需要明确知道去哪读 result.json，
+    # 而不是去猜 ultralytics 这次把 save_dir 放到了哪层目录里
+    result_out: str = ""
+    # Harness 模式下关掉自动导出：由 Harness 自己挑 mAP 最高的那次导出，
+    # 否则后跑的实验（哪怕更差）会覆盖前面更好的 best.pt
+    no_export: bool = False
+
     extra: dict = field(default_factory=dict)
 
 
@@ -126,7 +133,8 @@ def train(cfg: TrainConfig) -> dict:
         result["save_dir"] = str(save_dir)
 
         if save_dir:
-            _export_best(save_dir)
+            if not cfg.no_export:
+                _export_best(save_dir)
             _write_result(save_dir, result)
 
     except RuntimeError as exc:
@@ -146,6 +154,13 @@ def train(cfg: TrainConfig) -> dict:
         result["error"] = f"{exc}\n{traceback.format_exc()[-800:]}"
 
     result["wall_time_sec"] = round(time.time() - started, 1)
+
+    # 无论成功失败都额外写一份到 Harness 指定的位置。
+    # 放在所有 except 之后，就是为了 OOM 这类失败也能留下记录。
+    if cfg.result_out:
+        out = Path(cfg.result_out)
+        _write_result(out.parent, result, filename=out.name)
+
     return result
 
 
@@ -173,9 +188,10 @@ def _export_best(save_dir: Path) -> None:
     print(f"\n[导出] 最佳权重 -> {BEST_EXPORT}")
 
 
-def _write_result(save_dir: Path, result: dict) -> None:
+def _write_result(save_dir: Path, result: dict, filename: str = "result.json") -> None:
     """写机器可读的实验结论，Harness 读的就是这个文件。"""
-    path = save_dir / "result.json"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    path = save_dir / filename
     path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -200,6 +216,10 @@ def parse_args() -> TrainConfig:
     p.add_argument("--patience", type=int, default=d.patience)
     p.add_argument("--name", default=d.name)
     p.add_argument("--project", default=d.project)
+    p.add_argument("--result-out", default=d.result_out,
+                   help="额外把 result.json 写到这个路径，Harness 用它取结果")
+    p.add_argument("--no-export", action="store_true",
+                   help="不自动导出 best.pt，交给调用方（如 Harness）决定")
     return TrainConfig(**{
         k.replace("-", "_"): v for k, v in vars(p.parse_args()).items()
     })

@@ -41,6 +41,14 @@ python training/prepare_dataset.py   # 下载已在 data/VOC 时会自动跳过
 python training/train.py --epochs 100
 ```
 
+跑自主实验闭环（题目第四部分，超参搜索；失败/OOM 也算一条记录）：
+
+```bash
+python harness/run.py                  # 默认 8 组、每组 8 epoch
+python harness/run.py --max-trials 4 --epochs 5   # 先小跑验证闭环
+python harness/run.py --reset          # 清空历史重来
+```
+
 ---
 
 ## 架构
@@ -78,6 +86,7 @@ TypeScript 类型由 `scripts/gen_event_types.py` 自动生成，不手抄、不
 | [`server/`](server/README.md) | 后端：Agent 运行时、模型接入、视觉推理、SSE 推送 |
 | [`web/`](web/README.md) | 前端：React + Vite，浅色简洁 |
 | [`training/`](training/README.md) | 训练：数据集准备、YOLO 训练、实验产出 |
+| [`harness/`](harness/README.md) | 自主实验闭环：超参搜索（试→记→学→再试） |
 | [`scripts/`](scripts/README.md) | 脚本：事件契约 → TS 类型生成 |
 
 根目录还有三份题目要求的说明文档：

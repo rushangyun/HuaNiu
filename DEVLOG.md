@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-10-09 · Day 0（晚）· Harness 自主实验闭环完成
+
+### 做了什么
+
+题目第四部分：让程序自己反复跑训练、比数字、决定下一组超参。纯手写，不依赖任何框架。
+在 `harness/` 下拆成四个各管一件事的模块，主入口 `run.py` 只负责组装：
+
+| 模块 | 职责 |
+| --- | --- |
+| `space.py` | 搜索空间：`SEARCH_SPACE`（6 个离散候选参数）/ `DEFAULTS` / `Budget` / `clamp_to_space` |
+| `experiment.py` | 实验记录：`Experiment`（ok/oom/failed 三态）、`experiments.jsonl` 追加读写 |
+| `runner.py` | 执行器：子进程调 `training/train.py`，读 `result.json` 翻成记录；超时记 failed 不卡死 |
+| `strategy.py` | 候选池生成（基线 + 单点扰动，去重后 13 组）+ 按历史 OOM 剪枝 |
+| `decide.py` | 决策器：默认走确定性策略；`--llm` 时可让本地 qwen2.5 当顾问，建议一律过 `clamp_to_space` |
+| `run.py` | 主入口：试→记→学→再试，写 `report.md`，自动导出 mAP 最高的 `best.pt` |
+
+### 两个关键设计决定
+
+1. **`training/train.py` 加 `--no-export` 开关。**
+   Harness 每组实验用独立的 `--name trial_N`，成功时让 Harness 自己挑 mAP 最高的那次导出到
+   `models/yolo/best.pt`，避免后跑的（可能更差的）实验覆盖前面的好模型。人工跑训练仍是默认自动导出。
+
+2. **失败（含 OOM）也是一条记录，闭环靠它学。**
+   `runner` 把训练脚本的 `error_type=oom` 翻成 `STATUS_OOM`；下一轮 `strategy.prune_with_history`
+   读历史，凡是 OOM 过的 `batch` 及以上直接踢出候选池。于是闭环**自动避开显存不够的配置**——
+   这正是「自主」的含义，不需要人去改代码。
+
+### 验证（不触发真实训练，逻辑层已通）
+
+```
+python harness/run.py --help       → 导入与装配正常，argparse 正常
+build_pool()                       → 13 组（去重后）
+模拟 batch=32 OOM                 → 剪枝后池 12 组，且不再含 batch>=32
+连续 decide_next 5 次             → 全不同，无重复
+```
+
+真实跑通需要 GPU 训练（每组数分钟起），逻辑层已验证；跑法见 `harness/README.md`：
+`python harness/run.py --max-trials 4 --epochs 5` 先小跑验证。
+
+### 顺带修的契约 bug（记录在 `core/events.py`）
+
+`Event.to_dict()` 原先把 `0` 当空值过滤（`v not in ("", 0, ...)`），导致实时视觉的
+`fps=0 / object_count=0` 被吞。改成只过滤 `None/""/{}/[]`，保留 0。
+
+---
+
 ## 2026-10-09 · Day 0 · 环境勘察与选型
 
 ### 目标
