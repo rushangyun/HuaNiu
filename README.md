@@ -89,11 +89,19 @@ TypeScript 类型由 `scripts/gen_event_types.py` 自动生成，不手抄、不
 | [`harness/`](harness/README.md) | 自主实验闭环：超参搜索（试→记→学→再试） |
 | [`scripts/`](scripts/README.md) | 脚本：事件契约 → TS 类型生成 |
 
-根目录还有三份题目要求的说明文档：
+根目录还有这几份说明文档（分工见下表，避免内容重复）：
 
-- [`DEVLOG.md`](DEVLOG.md) — 工程日志，含踩坑与卡住记录
-- [`AI_USAGE.md`](AI_USAGE.md) — AI 使用情况如实说明
-- [`PLAN.md`](PLAN.md) — 三天排期与架构决策
+| 文档 | 时态 | 内容 |
+|---|---|---|
+| [`DEVLOG.md`](DEVLOG.md) | 过去时 | 工程日志：做了什么、卡在哪、怎么解决、实测数据 |
+| [`PLAN.md`](PLAN.md) | 将来时 | 排期：里程碑、当前状态、阻塞项、待确认事项 |
+| [`AI_USAGE.md`](AI_USAGE.md) | — | AI 使用情况如实说明（题目要求） |
+| [`AUDIOBOOK_DESIGN.md`](AUDIOBOOK_DESIGN.md) | — | 创意作品：AI 有声小说网页设计方案 |
+| [`AUDIO_QUALITY.md`](AUDIO_QUALITY.md) | — | 创意作品：TTS 双 Provider 落地与音质提升方案 |
+| [`KNOWLEDGE.md`](KNOWLEDGE.md) | — | 整个项目流程的重要知识点总结 |
+
+> **分工红线**：`DEVLOG.md` 只记录已发生的事实与证据；`PLAN.md` 只写计划与安排。
+> 设计理由放在 `PLAN.md`，实现结果与验证数据放在 `DEVLOG.md`，两边不互相抄。
 
 ---
 
