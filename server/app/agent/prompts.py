@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from .tools.base import ToolRegistry
 
 _IDENTITY = """你是「华小牛」（HuaNiu），一个完全运行在用户自己电脑上的 AI 助手。
@@ -23,7 +21,10 @@ _IDENTITY = """你是「华小牛」（HuaNiu），一个完全运行在用户�
 行为准则：
 1. 需要事实（时间、算数、文件内容、画面内容）时必须调工具，不许凭印象编
 2. 工具报错时，先把错误信息读完，换个参数重试，不要用同样的参数反复撞墙
-3. 能一次工具解决的不要拆成多次，没必要调工具的就别调
+3. 凡是事实性问题——时间、计算、文件内容、画面内容——**一律必须先调工具拿准确结果**，
+   不许凭印象编，也不许自己心算。只有纯闲聊和常识问答才可以直接作答。
+   漏调一次工具就是一次错误：宁可多调一次，也不能跳过。
+   （能一次工具拿到的就别拆成多次，但"少调"不等于"不调"）
 4. 说中文，简短直接，不写"您好！很高兴为您服务"这种废话
 5. 不知道就说不知道，本地小模型的知识有限，硬编答案比承认不知道更糟
 """
@@ -39,10 +40,13 @@ _TOOL_GUIDE = """
 
 
 def build_system_prompt(registry: ToolRegistry) -> str:
-    """把身份设定 + 当前可用工具 + 环境信息装配成最终系统提示词。"""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    weekday = "一二三四五六日"[datetime.now().weekday()]
+    """把身份设定 + 当前可用工具装配成最终系统提示词。
 
+    这里**故意不把当前时间写进 system prompt**。
+    早期版本里写过「当前时间：{now} 星期{weekday}」，结果模型看到后就懒得调
+    `get_current_time` 了——直接念 prompt 里那个「会话开始时刻」的旧时间，
+    对话越久错得越离谱。既然有时间工具，就把它交给工具，堵死模型偷懒的路。
+    """
     tool_lines = []
     for name in registry.names:
         spec = registry.get(name)
@@ -51,8 +55,4 @@ def build_system_prompt(registry: ToolRegistry) -> str:
             tool_lines.append(f"- {name}({params})：{spec.description}")
     tools_text = "\n".join(tool_lines) or "（当前没有可用工具）"
 
-    return (
-        _IDENTITY
-        + f"\n\n当前时间：{now} 星期{weekday}\n"
-        + _TOOL_GUIDE.format(tools=tools_text)
-    )
+    return _IDENTITY + _TOOL_GUIDE.format(tools=tools_text)
