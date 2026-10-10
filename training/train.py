@@ -70,8 +70,28 @@ class TrainConfig:
     # Harness 模式下关掉自动导出：由 Harness 自己挑 mAP 最高的那次导出，
     # 否则后跑的实验（哪怕更差）会覆盖前面更好的 best.pt
     no_export: bool = False
+    # 断点续跑：从上次崩溃的 last.pt 接着训，而不是从头开始
+    resume: bool = False
 
     extra: dict = field(default_factory=dict)
+
+
+def _resolve_resume_ckpt(cfg: TrainConfig) -> Path:
+    """找到断点续跑用的 last.pt。
+
+    ultralytics 有个坑（见 DEVLOG 第 12 条）：project="runs/train"
+    实际会输出到 runs/detect/runs/train/<name>/，中间多套了一层 task 目录。
+    所以这里两个位置都找一遍，避免"明明跑过却说找不到权重"。
+    """
+    cands = [
+        Path(cfg.project) / cfg.name / "weights" / "last.pt",
+        Path("runs") / "detect" / cfg.project / cfg.name / "weights" / "last.pt",
+    ]
+    for c in cands:
+        if c.is_file():
+            return c
+    tried = ", ".join(str(c) for c in cands)
+    raise FileNotFoundError(f"找不到断点权重（试过：{tried}）")
 
 
 def train(cfg: TrainConfig) -> dict:
@@ -96,26 +116,33 @@ def train(cfg: TrainConfig) -> dict:
     }
 
     try:
-        model = YOLO(cfg.model)
-        results = model.train(
-            data=cfg.data,
-            epochs=cfg.epochs,
-            imgsz=cfg.imgsz,
-            batch=cfg.batch,
-            lr0=cfg.lr0,
-            lrf=cfg.lrf,
-            momentum=cfg.momentum,
-            weight_decay=cfg.weight_decay,
-            warmup_epochs=cfg.warmup_epochs,
-            device=cfg.device,
-            workers=cfg.workers,
-            patience=cfg.patience,
-            project=cfg.project,
-            name=cfg.name,
-            exist_ok=cfg.exist_ok,
-            verbose=True,
-            **cfg.extra,
-        )
+        if cfg.resume:
+            # 断点续跑：ultralytics 必须从 last.pt 恢复，且只传 resume=True。
+            # 超参不能再传，否则会用命令行参数覆盖 args.yaml 里恢复出来的训练状态，
+            # 结果就是"看起来在续跑，实际是重新开始"。
+            model = YOLO(str(_resolve_resume_ckpt(cfg)))
+            results = model.train(resume=True)
+        else:
+            model = YOLO(cfg.model)
+            results = model.train(
+                data=cfg.data,
+                epochs=cfg.epochs,
+                imgsz=cfg.imgsz,
+                batch=cfg.batch,
+                lr0=cfg.lr0,
+                lrf=cfg.lrf,
+                momentum=cfg.momentum,
+                weight_decay=cfg.weight_decay,
+                warmup_epochs=cfg.warmup_epochs,
+                device=cfg.device,
+                workers=cfg.workers,
+                patience=cfg.patience,
+                project=cfg.project,
+                name=cfg.name,
+                exist_ok=cfg.exist_ok,
+                verbose=True,
+                **cfg.extra,
+            )
 
         # ultralytics 训练结束会自带一轮 val，指标在 results_dict 里
         raw = getattr(results, "results_dict", None) or {}
@@ -220,6 +247,8 @@ def parse_args() -> TrainConfig:
                    help="额外把 result.json 写到这个路径，Harness 用它取结果")
     p.add_argument("--no-export", action="store_true",
                    help="不自动导出 best.pt，交给调用方（如 Harness）决定")
+    p.add_argument("--resume", action="store_true",
+                   help="断点续跑：从上次 last.pt 接着训（超参从 args.yaml 恢复）")
     return TrainConfig(**{
         k.replace("-", "_"): v for k, v in vars(p.parse_args()).items()
     })
