@@ -48,6 +48,8 @@ datasets/
 # ===== 训练产物 =====
 runs/
 *.log
+*.err
+*.out
 wandb/
 ultralytics_runs/
 
