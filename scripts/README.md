@@ -45,6 +45,26 @@
 
 ---
 
+## train_background.cmd — 夜间挂机训练
+
+脱离终端启动 YOLO 训练（断点续跑 + 崩溃自动重试）。
+
+```bash
+cmd.exe //c start "" "D:\workbuddy document\2026-10-09-13-21-03\scripts\train_background.cmd"
+```
+
+**为什么是 .cmd 而不是 bash 后台任务**：我的 shell 结束（或模型从 Hy4 切到 Hy3）后，
+挂在它下面的后台进程会被回收。Windows 的 `start` 会新开一个窗口，
+进程归属于新窗口，因此**你关掉我这个终端、甚至我这边额度用尽，训练都还在跑**。
+
+**为什么带重试**：上次训练崩在 epoch 35（瞬时读图失败），一整夜白跑。
+这个脚本最多重试 5 次，每次都 `--resume` 接着训，崩溃不再浪费一晚。
+
+日志：`training/logs/train.log`（`tail -f` 实时看）。
+跑完会生成 `result.json` 并自动导出 `best.pt`。
+
+---
+
 ## push.sh — 推送到 GitHub
 
 ```bash
