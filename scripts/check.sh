@@ -34,7 +34,9 @@ echo ""
 code=$(probe "http://127.0.0.1:11434/api/tags")
 row "Ollama" "http://127.0.0.1:11434" "$code" "没装/没起：先跑 ollama serve"
 
-code=$(probe "http://127.0.0.1:8000/health")
+# 注意：健康检查路径是 /api/health（带 api 前缀），不是 /health
+# 踩过坑：写成 /health 会返回 404，被误判成"后端没起"，其实后端活得好好的
+code=$(probe "http://127.0.0.1:8000/api/health")
 row "后端" "http://127.0.0.1:8000" "$code" "没起：python server/main.py（日志 server/.run.log）"
 
 code=$(probe "http://127.0.0.1:5173")
