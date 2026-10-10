@@ -45,6 +45,31 @@
 
 ---
 
+## push.sh — 推送到 GitHub
+
+```bash
+./scripts/push.sh            # 推 master
+./scripts/push.sh main       # 推指定分支
+```
+
+**为什么不能直接用 `git push`**：本机代理端口**每次会话都会变**（实测 10383 / 10783 / 4633），
+而 `~/.gitconfig` 里有一条按 URL 匹配的写死配置：
+
+```
+http.https://github.com.proxy = http://127.0.0.1:10383
+```
+
+它优先级高于通用的 `http.proxy`，所以 `git -c http.proxy=` 清不掉它，
+端口一过期就报 `Failed to connect to github.com over proxy 127.0.0.1`。
+
+脚本会**实时读取环境变量 `$https_proxy`/`$http_proxy`**，先走代理，
+失败再自动回退直连（把按 URL 的代理置空才是真正的禁用）。两种都不行就如实报错。
+
+> 顺带一提：Windows schannel 会对代理的 MITM 证书做吊销检查并失败
+> （`CRYPT_E_NO_REVOCATION_CHECK`），所以脚本里必须关掉 `sslVerify`。
+
+---
+
 ## gen_event_types.py
 
 把 Python 的事件契约转成 TypeScript 类型。
