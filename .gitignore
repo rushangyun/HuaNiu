@@ -81,3 +81,8 @@ __logs__/
 
 # ===== WorkBuddy 工作区记忆（含个人信息，不入库） =====
 .workbuddy/
+
+# ===== 有声书运行产物与离线包（可重新生成，不入库） =====
+storage/
+*.bundle
+.huaniu.pids
