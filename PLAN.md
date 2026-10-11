@@ -230,6 +230,10 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
    - 详见 [`DEVLOG.md`](DEVLOG.md) 2026-10-11 条目
 2. ✅ `AI_USAGE.md` 已补记 edge-tts 合规风险（数据出境）与本地模型解析局限
 3. ✅ 演示打磨 + 推送 GitHub（commit `5fcbf3b` → origin/master）
+4. ✅ 解析质量与角色声线修复（commit `7c48b62` → origin/master）
+   - 修复前端创建后卡「解析中」、解析产出垃圾（碎片段/假角色名）、男角色被配女声、旁白被角色声线替代
+   - 解析器重构为「程序切句 + LLM 只标注」；角色性别按 LLM 上下文提示 + 代词归因判定；对白必须带引号
+   - 新增 `POST /api/novels/{nid}/reparse` 旧书重解析。详见 [`DEVLOG.md`](DEVLOG.md) 2026-10-11（续）
 
 ---
 
@@ -268,15 +272,39 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
 - **B 纯离线高质量**：CosyVoice2-0.5B / GPT-SoVITS（8GB 显存够），要下 1~2GB 模型
 - **C 放弃离线**：全程联网用 edge-tts
 
-## 九、模型额度切换说明（Hy4 preview → Hy3）
+## 九、模型交接计划（Hy4 preview → Hy3 / 下一个模型）
 
-用户提示当前 Hy4 preview 额度可能用尽，之后会切到 Hy3 继续。
-**无缝接续靠本目录下的日志与 `DEVLOG.md`**：新会话应先读
-`.workbuddy/memory/` 最新日志 + `DEVLOG.md` 顶部 + `PLAN.md` 第六节，
-即可还原全部上下文、决策与阻塞项，无需用户复述。
+> 用户提示当前模型额度可能用尽，之后会切到下一个模型继续。
+> **无缝接续靠本目录下的日志与 `DEVLOG.md`**：新会话先读下面三个信息源即可还原全部上下文、决策与阻塞项，无需用户复述。
 
-> 📌 本会话（2026-10-11）已实际按此机制接续成功：新会话读完 memory + DEVLOG + PLAN 即还原全部上下文。
-> 保持机制有效的关键：**三个信息源要保持同步**——DEVLOG 记最新事实、本文件第六节排期/阻塞项要及时翻牌、memory 每日补记。
+### 9.1 接续入口（按此顺序读）
+1. `.workbuddy/memory/` 最新日期日志（最精炼的当日事实）
+2. `DEVLOG.md` 顶部最新条目（过去时：做了什么 / 卡在哪 / 实测数据）
+3. `PLAN.md` 本文件第六节排期 + 本节（将来时：排期 / 状态 / 待办）
+
+> 📌 本会话（2026-10-11）已实际按此机制接续成功。保持机制有效的关键：**三个信息源要同步**——DEVLOG 记最新事实、本文件排期/阻塞项及时翻牌、memory 每日补记。
+
+### 9.2 当前状态快照（2026-10-11 交接时点）
+- **创意作品「AI 有声小说」MVP 已完整落地并两轮修复**，最新 commit `7c48b62` 已推送 `origin/master`。
+- 已完成：建书（粘贴/上传 + 版权校验）→ 本地 Ollama `qwen2.5:7b-instruct` 解析（角色/情绪/语速标注）→ edge-tts 联网合成 → 章节/全书合并下载。前端三视图（对话/视觉/有声书）就绪。
+- 已修复并通过验证：前端创建后卡「解析中」；解析产出垃圾（碎片段/假角色名）；男角色被配女声；旁白被角色声线替代。
+- 运行方式：后端 `HUANIU_RELOAD=0 .../server/main.py`（:8000）、前端 `web/` 下 `npm run dev`（:5173）。本地 LLM 需 Ollama 已 `pull qwen2.5:7b-instruct` 并 `serve`。
+- 示例书 `nov_a7aa0e0682b102c7`（《雨夜客栈》）已按修复后解析为正确结果，可直接试听。
+
+### 9.3 下一个模型的优先事项（按建议顺序）
+1. **整本几十万字压测**：目前只验过 ~1 千字短篇。用真实长篇测解析耗时、token 预算、合成稳定性。
+2. **角色名册跨块归并**：同一角色在不同块可能被识别为不同名（如敲门人被分别叫「门外的人」「敲门人」），需按别名/上下文合并同一实体，避免重复声线条目。
+3. **M2 情绪真正调制语音**：当前只标注 emotion 未影响发声（edge-tts 不支持 style/emotion；可换支持情绪的 TTS 或用 SSML）。
+4. **piper 离线兜底开箱**：默认打包一个中文模型，实现真正可离线。
+5. **前端便捷按钮**：把「重新解析」（已有 `POST /api/novels/{nid}/reparse`）、「单段情绪/语速试听」补到 `AudiobookView`。
+6. **YOLO 训练续跑（B 方案）**：代码就绪，需 3 小时 GPU，建议夜间挂机（与本作品无关，独立线）。
+
+### 9.4 关键坑（避免重踩）
+- **改了 `server/app/audiobook/parser.py` / `pipeline.py` 等后端代码后必须重启后端进程**才生效（无热重载）。端口杀进程注意 Git Bash 会把 `/PID` 当路径，用 `MSYS_NO_PATHCONV=1 taskkill /PID <pid> /F`。
+- 隔离 venv：`C:\Users\19067\.workbuddy\binaries\python\envs\default\Scripts\python.exe`；装包用 `python -m pip install`（别 `pip install --upgrade pip`，会自升级失败）。
+- 后端探测/脚本要加 `curl --noproxy '*'`（本机有 http_proxy，否则误判端口被占/502）。
+- 推送用 `bash scripts/push.sh master`（自动读代理端口 + 重试）；网络不通时生成 bundle 兜底。
+- `storage/`、`*.bundle`、`.huaniu.pids` 是运行产物，**不入库**。
 
 ---
 
