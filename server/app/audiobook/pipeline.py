@@ -18,9 +18,40 @@ from .repo import Repo
 logger = logging.getLogger(__name__)
 
 
-def _default_voice_for(index: int) -> str:
-    """给第 index 个（非旁白）角色分配默认音色，男女交替避免全一个调。"""
-    return settings.voice_female if index % 2 == 0 else settings.voice_male
+import re as _re
+
+
+def _default_voice_for(gender: str | None) -> str:
+    """按角色性别分配默认音色；性别不明默认男声。"""
+    if gender == "female":
+        return settings.voice_female
+    return settings.voice_male  # male 或 unknown 都走男声
+
+
+def _pronoun_gender_map(names: list[str], text: str) -> dict[str, str | None]:
+    """把每个「他/她」归因到其前方最近的角色名，统计各角色男女代词分布。
+
+    比「名字周围窗口里数代词」准确得多——「她看了林昭一眼」里的「她」属于苏晚，
+    而非林昭（林昭只是宾语）。返回 {name: 'male'|'female'|None}（打平/无代词则 None）。
+    """
+    events: list[tuple[int, int, str]] = []
+    for n in names:
+        for m in _re.finditer(_re.escape(n), text):
+            events.append((m.start(), 0, n))  # kind 0 = 名字
+    for m in _re.finditer(r"[他她]", text):
+        events.append((m.start(), 1, m.group(0)))  # kind 1 = 代词
+    events.sort()
+    counts = {n: [0, 0] for n in names}  # [男, 女]
+    last: str | None = None
+    for _pos, kind, val in events:
+        if kind == 0:
+            last = val
+        elif last is not None:
+            counts[last][0 if val == "他" else 1] += 1
+    return {
+        n: ("male" if m > f else ("female" if f > m else None))
+        for n, (m, f) in counts.items()
+    }
 
 
 async def parse_novel(
@@ -37,6 +68,7 @@ async def parse_novel(
         repo.set_status(novel_id, "parsing")
         chapters = chunking.split_chapters(text)
         roster: list[str] = []
+        gender_hints: dict[str, str | None] = {}
 
         total_blocks = sum(len(chunking.split_into_blocks(body)) for _, body in chapters)
         done_blocks = 0
@@ -46,10 +78,18 @@ async def parse_novel(
             blocks = chunking.split_into_blocks(body)
             for block in blocks:
                 parsed = await parser.parse_block(block, roster, title, provider)
-                # 把 LLM 回报的名册并入全局 roster（去重保序）
-                for name in parsed.get("speakers_seen", []):
+                # 把 LLM 回报的名册并入全局 roster（去重保序），并收集体别提示
+                for entry in parsed.get("speakers_seen", []):
+                    if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                        name, g = entry
+                    elif isinstance(entry, dict):
+                        name, g = entry.get("name"), entry.get("gender")
+                    else:
+                        name, g = entry, None
                     if name and name not in roster:
                         roster.append(name)
+                    if name and name not in gender_hints and g:
+                        gender_hints[name] = g
                 segs = parser.materialize(block, parsed)
                 for si, seg in enumerate(segs):
                     if seg["speaker"] and seg["speaker"] not in roster:
@@ -80,10 +120,24 @@ async def parse_novel(
                     ),
                 )
 
-        # 建角色名册：旁白 + 所有识别出的说话人
+        # 建角色名册：旁白 + 所有识别出的说话人。
+        # 性别判定：LLM 读了全文给的提示最稳；但与文中代词硬证据冲突时以代词为准
+        # （模型可能只按名字猜性别）；都不确定默认男声。
+        pron_map = _pronoun_gender_map(roster, text)
+        resolved: dict[str, str] = {}
+        for name in roster:
+            heuristic = pron_map.get(name)
+            hint = gender_hints.get(name)
+            if heuristic and hint and heuristic != hint:
+                g = heuristic  # 代词是原文硬证据，优先于模型按名字猜的性别
+            elif hint in ("male", "female"):
+                g = hint
+            else:
+                g = heuristic or "male"
+            resolved[name] = g
         repo.ensure_speaker(novel_id, "旁白", settings.voice_narrator)
-        for i, name in enumerate(roster):
-            repo.ensure_speaker(novel_id, name, _default_voice_for(i))
+        for name in roster:
+            repo.ensure_speaker(novel_id, name, _default_voice_for(resolved[name]))
 
         repo.set_status(novel_id, "parsed")
         await bus.publish(

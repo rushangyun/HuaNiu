@@ -427,3 +427,22 @@ class Repo:
             return None
         p = Path(novel.raw_path)
         return p.read_text(encoding="utf-8") if p.exists() else None
+
+    def reset_parsed(self, nid: str) -> None:
+        """清空一本书已解析/合成的产物，回到可重新解析状态（用于重新解析）。
+
+        顺序：先删依赖子表（job→segment→chapter），再删 speakers，最后复位状态。
+        """
+        with self._lock, self._maker() as s:
+            chap_ids = s.execute(
+                select(Chapter.id).where(Chapter.novel_id == nid)
+            ).scalars().all()
+            if chap_ids:
+                s.execute(
+                    Segment.__table__.delete().where(Segment.chapter_id.in_(chap_ids))
+                )
+            s.execute(Job.__table__.delete().where(Job.novel_id == nid))
+            s.execute(Chapter.__table__.delete().where(Chapter.novel_id == nid))
+            s.execute(Speaker.__table__.delete().where(Speaker.novel_id == nid))
+            s.commit()
+        self.set_status(nid, "parsing")

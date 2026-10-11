@@ -50,12 +50,25 @@ export function useAudiobook() {
     const [d, segs] = await Promise.all([getNovel(id), getSegments(id)]);
     setDetail(d);
     setSegments(segs);
+    let lastPhase: string | null = d?.status ?? null;
+    const refresh = () => {
+      getNovel(id).then(setDetail).catch(() => {});
+      getSegments(id).then(setSegments).catch(() => {});
+    };
     esRef.current = subscribeProgress(id, (p) => {
       setProgress((prev) =>
         prev && prev.phase === p.phase && prev.done === p.done && prev.total === p.total
           ? prev
           : p
       );
+      // 解析/合成阶段切换完成后回刷详情与段落，否则创建后界面会一直卡在「解析中」
+      if (
+        p.phase !== lastPhase &&
+        (p.phase === "parsed" || p.phase === "done" || p.phase === "error")
+      ) {
+        lastPhase = p.phase;
+        refresh();
+      }
     });
   }, []);
 

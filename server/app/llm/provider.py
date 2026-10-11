@@ -144,6 +144,8 @@ class OpenAICompatProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[ContentDelta | ToolCallDelta | ChatResult]:
         """发起一轮对话，边收边yield。
 
@@ -155,12 +157,18 @@ class OpenAICompatProvider:
             "messages": messages,
             "stream": True,
             "temperature": settings.llm_temperature if temperature is None else temperature,
-            "max_tokens": settings.llm_max_tokens,
+            "max_tokens": max_tokens if max_tokens is not None else settings.llm_max_tokens,
         }
         if tools:
             payload["tools"] = tools
             # 不设成 auto：让模型自己判断该不该用工具，避免强行调用
             payload["tool_choice"] = "auto"
+        if response_format:
+            # 强制结构化输出（Ollama / vLLM 都认 OpenAI 的 response_format）。
+            # 解析这类"必须把文本回填成 JSON"的任务强烈依赖它——
+            # 否则 7B 模型常把原文里的引号/换行塞进 JSON 字符串却不转义，
+            # 导致 json.loads 直接失败、静默降级成垃圾结果。
+            payload["response_format"] = response_format
 
         content_parts: list[str] = []
         buffers: dict[int, _ToolCallBuffer] = {}

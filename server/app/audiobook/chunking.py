@@ -83,3 +83,27 @@ def split_sentences(text: str) -> list[str]:
             seg = seg + (sep or "")
         out.append(seg)
     return out
+
+
+def group_sentences(sentences: list[str], min_chars: int = 30, max_chars: int = 120) -> list[str]:
+    """把过碎的句子合并成 30~120 字的可朗读单元。
+
+    split_sentences 会按每个句末标点切，一段 800 字往往被切成 40+ 句，
+    直接让 LLM 逐句标注会撑爆输出 token。先把相邻句子合并到合理长度，
+    既符合「朗读单元 25~120 字」的设计，又大幅减少标注条数。
+    """
+    groups: list[str] = []
+    buf = ""
+    for s in sentences:
+        if buf and len(buf) + len(s) > max_chars:
+            groups.append(buf)
+            buf = s
+        else:
+            buf = (buf + s) if buf else s
+    if buf:
+        groups.append(buf)
+    # 太短的首段并入后一段，避免开头出现一两个字的碎段
+    if len(groups) > 1 and len(groups[0]) < min_chars:
+        groups[1] = groups[0] + groups[1]
+        groups.pop(0)
+    return groups

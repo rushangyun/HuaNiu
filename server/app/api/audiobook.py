@@ -204,6 +204,17 @@ async def start_synthesis(nid: str, request: Request):
     return {"ok": True, "jobs": count}
 
 
+@router.post("/{nid}/reparse")
+async def reparse_novel(nid: str, request: Request):
+    """清空已解析产物并重新解析（更换解析策略 / 修复角色声线后重跑旧书用）。"""
+    ab = _ab(request)
+    if ab.repo.get_novel(nid) is None:
+        raise HTTPException(404, "书籍不存在")
+    ab.repo.reset_parsed(nid)
+    asyncio.create_task(parse_novel(nid, ab.repo, ab.provider, ab.bus))
+    return {"ok": True}
+
+
 @router.get("/{nid}/progress")
 async def progress(nid: str, request: Request):
     """SSE 进度流。和 core/events 同一套 SSE 机制。"""
