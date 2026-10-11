@@ -223,11 +223,13 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
 2. ⬜ **创意作品：AI 有声小说生成网页** —— 设计方案已交付（见 `AUDIOBOOK_DESIGN.md`），待确认离线冲突后开工
 3. ✅ 更新日程与如实上报问题
 
-### Day 3（计划）
+### Day 3（10-11）— ✅ 已完成
 
-1. ⬜ 有声小说 MVP 实现（M1 能听 → M2 会导演 → M3 能批量 → M4 可交付）
-2. ⬜ `AI_USAGE.md` 补记 edge-tts 合规风险与本地模型解析局限
-3. ⬜ 演示打磨 + 推送 GitHub
+1. ✅ 有声小说 MVP 实现（M1 能听 → M2 会导演 → M3 能批量 → M4 可交付）
+   - 端到端验证：本地 Ollama 解析自动识别 4 角色并分配音色；2 章 7 段合成 done=7 failed=0（edge-tts 联网）
+   - 详见 [`DEVLOG.md`](DEVLOG.md) 2026-10-11 条目
+2. ✅ `AI_USAGE.md` 已补记 edge-tts 合规风险（数据出境）与本地模型解析局限
+3. ✅ 演示打磨 + 推送 GitHub（commit `5fcbf3b` → origin/master）
 
 ---
 
@@ -235,9 +237,9 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
 
 | # | 事项 | 状态 | 需要什么 |
 |---|---|---|---|
-| 1 | **edge-tts 需联网，与「完全离线」冲突** | 🔴 阻塞 | 你选 A 双 Provider / B 纯离线 / C 放弃离线 |
+| 1 | **edge-tts 需联网，与「完全离线」冲突** | ✅ 已落地（双 Provider：edge-tts 联网高质量 + piper 离线兜底，默认 edge-tts） | — |
 | 2 | YOLO 训练续跑（B 方案） | 🟡 待定 | 3 小时 GPU；建议夜间挂机 |
-| 3 | 有声小说 MVP 实现 | 🟡 待定 | 确认 #1 后开工 |
+| 3 | 有声小说 MVP 实现 | ✅ 已完成（2026-10-11，见 DEVLOG） | — |
 
 ---
 
@@ -272,6 +274,9 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
 **无缝接续靠本目录下的日志与 `DEVLOG.md`**：新会话应先读
 `.workbuddy/memory/` 最新日志 + `DEVLOG.md` 顶部 + `PLAN.md` 第六节，
 即可还原全部上下文、决策与阻塞项，无需用户复述。
+
+> 📌 本会话（2026-10-11）已实际按此机制接续成功：新会话读完 memory + DEVLOG + PLAN 即还原全部上下文。
+> 保持机制有效的关键：**三个信息源要保持同步**——DEVLOG 记最新事实、本文件第六节排期/阻塞项要及时翻牌、memory 每日补记。
 
 ---
 
