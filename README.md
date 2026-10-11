@@ -63,6 +63,7 @@ python harness/run.py --reset          # 清空历史重来
                                 │   vision/  YOLO 推理          │
                                 │   transport/ SSE 推送         │
                                 │   api/     薄路由             │
+                                │   audiobook/ 有声书解析·合成  │
                                 │   core/    契约 · 配置        │
                                 └──────────┬───────────────────┘
                                            │ HTTP
@@ -117,6 +118,7 @@ TypeScript 类型由 `scripts/gen_event_types.py` 自动生成，不手抄、不
 | `list_dir` / `read_file` | 看工程结构、读文件（有沙箱，出不了工作区） |
 | `project_overview` | 一句话了解本项目 |
 | `vision_status` / `vision_detect` | 检测图片或摄像头画面里的物体（需先训练） |
+| **有声书**（顶栏切换） | 粘贴/上传小说正文，本地 LLM 解析角色情绪、edge-tts 合成、整本导出 MP3 / ZIP |
 
 试试问：**「现在几点」**、**「算一下 12345 × 6789」**、**「这个项目是干什么的」**。
 

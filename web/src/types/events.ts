@@ -13,9 +13,10 @@ export const DONE = "done" as const;
 export const ERROR = "error" as const;
 export const VISION_STATUS = "vision_status" as const;
 export const VISION_STATS = "vision_stats" as const;
+export const AUDIOBOOK_PROGRESS = "audiobook_progress" as const;
 
 export type EventType =
-  | "token" | "tool_start" | "tool_end" | "round" | "done" | "error" | "vision_status" | "vision_stats";
+  | "token" | "tool_start" | "tool_end" | "round" | "done" | "error" | "vision_status" | "vision_stats" | "audiobook_progress";
 
 // ---------------------------------------------------------------------------
 // 事件结构
@@ -62,6 +63,17 @@ export interface VisionStatsEvent {
   elapsed_ms?: number;
 }
 
+export interface AudiobookProgressEvent {
+  type: typeof AUDIOBOOK_PROGRESS;
+  novel_id?: string;
+  phase?: string;
+  done?: number;
+  total?: number;
+  failed?: number;
+  pct?: number;
+  message?: string;
+}
+
 /** 后端可能推来的任意一种事件。 */
 export type AgentEvent =
   | TokenEvent
@@ -70,4 +82,5 @@ export type AgentEvent =
   | RoundEvent
   | DoneEvent
   | ErrorEvent
-  | VisionStatsEvent;
+  | VisionStatsEvent
+  | AudiobookProgressEvent;

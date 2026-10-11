@@ -1,0 +1,22 @@
+# 华小牛 HuaNiu 后端依赖
+# 安装：pip install -r requirements.txt
+#
+# 说明：
+# - 核心（对话 + 有声书）只需下面 6 个轻量包，torch 不是必需。
+# - 实时视觉（YOLO）需要 torch/ultralytics，但 detector 为延迟加载，
+#   不装也能正常 import 与启动，只是视觉面板降级为「未就绪」。
+# - 有声书 TTS 默认走 edge-tts（联网）；ffmpeg 合并用 imageio-ffmpeg
+#   自带的二进制兜底，无需在系统里单独安装 ffmpeg。
+
+fastapi>=0.110
+uvicorn[standard]>=0.27
+sqlalchemy>=2.0
+edge-tts>=6.1
+imageio-ffmpeg>=0.4
+httpx>=0.27
+pydantic-settings>=2.0
+python-multipart>=0.0.9
+
+# 可选：实时视觉（YOLO）。取消注释即可启用视觉面板。
+# torch>=2.1
+# ultralytics>=8.1

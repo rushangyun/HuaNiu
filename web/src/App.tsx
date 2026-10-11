@@ -8,9 +8,10 @@ import { Composer } from "./components/Composer";
 import { MessageBubble } from "./components/MessageBubble";
 import { StatusBar } from "./components/StatusBar";
 import { VisionPanel } from "./components/VisionPanel";
+import { AudiobookView } from "./components/AudiobookView";
 import { useChat } from "./hooks/useChat";
 
-type View = "chat" | "vision";
+type View = "chat" | "vision" | "audiobook";
 
 export default function App() {
   const { messages, busy, send, stop, clear } = useChat();
@@ -45,9 +46,17 @@ export default function App() {
         >
           实时视觉
         </button>
+        <button
+          className={view === "audiobook" ? "active" : ""}
+          onClick={() => setView("audiobook")}
+        >
+          有声书
+        </button>
       </nav>
 
-      {view === "vision" ? (
+      {view === "audiobook" ? (
+        <AudiobookView />
+      ) : view === "vision" ? (
         <VisionPanel />
       ) : (
         <>

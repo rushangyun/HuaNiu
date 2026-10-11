@@ -19,10 +19,23 @@ from dataclasses import dataclass
 
 from ..agent.runtime import AgentRuntime
 from ..agent.tools.base import ToolRegistry
+from ..audiobook.bus import ProgressBus
+from ..audiobook.repo import Repo
+from ..audiobook.worker import SynthWorker
 from ..llm.provider import OpenAICompatProvider
 from ..vision.detector import Detector
 from ..vision.stream import DetectionStream
 from .config import Settings
+
+
+@dataclass
+class AudiobookParts:
+    """有声书子系统所需的依赖集合（和主 Container 同构，只是另一个子域）。"""
+
+    repo: Repo
+    bus: ProgressBus
+    worker: SynthWorker
+    provider: OpenAICompatProvider  # 解析复用同一个 LLM provider
 
 
 @dataclass
@@ -35,6 +48,7 @@ class Container:
     runtime: AgentRuntime
     detector: Detector
     stream: DetectionStream
+    audiobook: AudiobookParts | None = None
 
     async def aclose(self) -> None:
         """进程退出时统一收尾。

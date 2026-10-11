@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -33,12 +34,17 @@ if str(_HERE) not in sys.path:
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from app.agent.runtime import AgentRuntime
 from app.agent.tools import build_registry
+from app.api import audiobook as audiobook_api
 from app.api import chat, health, vision
+from app.audiobook.bus import ProgressBus
+from app.audiobook.repo import Repo
+from app.audiobook.worker import SynthWorker
 from app.core.config import settings
-from app.core.container import Container
+from app.core.container import AudiobookParts, Container
 from app.llm.provider import OpenAICompatProvider
 from app.vision.detector import Detector
 from app.vision.stream import DetectionStream
@@ -66,6 +72,19 @@ def build_container() -> Container:
     registry = build_registry(detector)
     runtime = AgentRuntime(provider, registry)
     stream = DetectionStream(detector)
+
+    # 有声书子系统：复用同一个 LLM provider 做文本解析
+    # repo / bus / worker 共享同一实例，进度推送才不会各发各的
+    ab_repo = Repo(settings.audiobook_db, settings.audiobook_storage)
+    ab_bus = ProgressBus()
+    ab_worker = SynthWorker(ab_repo, ab_bus, settings.audiobook_storage)
+    audiobook = AudiobookParts(
+        repo=ab_repo,
+        bus=ab_bus,
+        worker=ab_worker,
+        provider=provider,
+    )
+
     return Container(
         settings=settings,
         provider=provider,
@@ -73,6 +92,7 @@ def build_container() -> Container:
         runtime=runtime,
         detector=detector,
         stream=stream,
+        audiobook=audiobook,
     )
 
 
@@ -81,15 +101,24 @@ async def lifespan(app: FastAPI):
     """应用生命周期：进来时装配，退出时收尾。"""
     container = build_container()
     app.state.container = container
+    # 常驻合成 Worker（消费有声书任务队列）
+    worker_task = None
+    if container.audiobook is not None:
+        worker_task = asyncio.create_task(container.audiobook.worker.run_forever())
     logger.info(
-        "华小牛已启动：模型=%s，工具=%s，视觉=%s",
+        "华小牛已启动：模型=%s，工具=%s，视觉=%s，有声书=%s",
         settings.llm_model,
         "、".join(container.registry.names),
         "就绪" if container.detector.available else "未就绪",
+        "已挂载" if container.audiobook else "未挂载",
     )
     try:
         yield
     finally:
+        if worker_task is not None:
+            worker_task.cancel()
+        if container.audiobook is not None:
+            container.audiobook.worker.stop()
         await container.aclose()
         logger.info("已退出")
 
@@ -118,6 +147,15 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(chat.router, prefix="/api")
     app.include_router(vision.router, prefix="/api")
+    # 有声书路由自身已带 /api/novels 前缀，不再叠加
+    app.include_router(audiobook_api.router)
+
+    # 音频产物静态服务：/audio/{novel_id}/chapter_01.mp3 等
+    import os
+
+    audio_dir = settings.audiobook_storage
+    os.makedirs(audio_dir, exist_ok=True)
+    app.mount("/audio", StaticFiles(directory=audio_dir), name="audio")
     return app
 
 

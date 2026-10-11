@@ -62,5 +62,25 @@ class Settings(BaseSettings):
     # read_file 工具只允许读这个目录里的东西，越界直接拒绝。
     workspace_dir: str = str(ROOT)
 
+    # ---------------- 有声书（AI 有声小说生成） ----------------
+    # TTS 双 Provider：edge-tts（联网优质，默认）/ piper（离线兜底）。
+    # 切换只改这一个变量，业务代码不动。
+    tts_provider: str = "edge"
+    # piper 离线兜底所需的二进制与模型（仅 TTS_PROVIDER=piper 时需要）
+    piper_bin: str = "piper"
+    piper_model: str = ""
+    # 默认音色：旁白/女声/男声。解析出的角色先用它们兜底，用户在 UI 可改。
+    voice_narrator: str = "zh-CN-YunyangNeural"  # 沉稳叙述
+    voice_female: str = "zh-CN-XiaoxiaoNeural"   # 温柔通用
+    voice_male: str = "zh-CN-YunxiNeural"        # 青年男声
+    # TTS 并发：edge-tts 是逆向接口，并发太高会触发限流，4 以内稳。
+    audiobook_concurrency: int = 4
+    # ffmpeg 二进制路径。默认走 PATH 上的 ffmpeg；找不到时自动用
+    # imageio-ffmpeg 自带的二进制（pip install imageio-ffmpeg 即可，免系统安装）。
+    ffmpeg_bin: str = "ffmpeg"
+    # 产物落盘：音频片段 / 章节合并 / 全书 / 原始文本
+    audiobook_storage: str = str(ROOT / "storage" / "audio")
+    audiobook_db: str = str(ROOT / "storage" / "audiobook.db")
+
 
 settings = Settings()

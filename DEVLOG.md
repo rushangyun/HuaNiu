@@ -22,6 +22,32 @@
 
 ---
 
+## 2026-10-11 · 有声书 MVP 落地（前端收尾 + 端到端验证）
+
+### 做了什么
+创意作品（AI 有声小说网页）从后端打通补成完整 MVP：
+- **前端补齐**：`web/src/api/audiobook.ts`（REST + SSE 订阅）、`web/src/hooks/useAudiobook.ts`（订阅式状态）、
+  `web/src/components/AudiobookView.tsx`（创作台 / 解析进度 / 角色音色配置 / 合成 / 试听 / 下载）、
+  `web/src/App.tsx` 加「有声书」标签、`web/vite.config.ts` 加 `/audio` 代理、`web/src/styles.css` 追加样式
+- 后端此前已就绪（`pipeline` 解析 + `worker` 合成 + `media` ffmpeg 合并），**本次未改后端代码**
+- 固化依赖：`server/requirements.txt`（fastapi / uvicorn / sqlalchemy / edge-tts / imageio-ffmpeg / httpx / pydantic-settings / python-multipart）
+- 删除临时冒烟脚本 `_smoke.py`
+
+### 验证（端到端，TestClient + 临时目录，不污染真实数据）
+输入两章测试文本：
+- 解析走本地 Ollama `qwen2.5:7b-instruct`，**自动识别 4 个角色并分配音色**：
+  旁白=云扬 / 林晚=晓晓 / 沈宴=云希 / 老管家=晓晓
+- 分 2 章 7 段；合成 **done=7 failed=0 有音频=7**（edge-tts 联网合成全成功）
+- 归一化单测：`"100元" → "一百元"`；分章、规则兜底均正确
+- 前端 `tsc --noEmit` + `vite build` 通过（42 模块，产物 `dist/` 正常）
+
+### 一个环境坑（复用价值）
+之前能跑的后端依赖环境没持久化，新会话里 `import fastapi` 直接 `ModuleNotFoundError`。
+已重建隔离 venv（`C:\Users\19067\.workbuddy\binaries\python\envs\default`）并装齐依赖；
+`requirements.txt` 现在就是可复现的安装清单。注意 pip 自升级会失败，用 `python -m pip install` 即可。
+
+---
+
 ## 2026-10-10（晚）· 🐛 修复 Agent「不调用工具」—— 一次完整的定位闭环
 
 ### 现象：用户实测对话，4 个问题里 2 个翻车

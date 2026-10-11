@@ -22,6 +22,11 @@ export default defineConfig({
           });
         },
       },
+      // 音频产物静态服务（章节 mp3 / 段落试听），普通代理即可
+      "/audio": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true,
+      },
     },
   },
 });

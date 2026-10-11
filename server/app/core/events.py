@@ -35,6 +35,8 @@ ERROR = "error"              # 出错了
 VISION_STATUS = "vision_status"  # 视觉模块状态变化
 VISION_STATS = "vision_stats"    # 实时检测的统计信息（FPS、目标数）
 
+AUDIOBOOK_PROGRESS = "audiobook_progress"  # 有声书解析/合成进度快照
+
 
 class Event:
     """事件基类。
@@ -128,6 +130,24 @@ class VisionStatsEvent(Event):
     type: str = field(default=VISION_STATS, init=False)
 
 
+@dataclass
+class AudiobookProgressEvent(Event):
+    """有声书解析/合成进度快照，通过 SSE 推给前端。
+
+    phase: parsing（切章解析中）/ parsed（解析完成待合成）/
+           synthesizing（逐段合成中）/ done（全书完成）/ error（出错）
+    """
+
+    novel_id: str = ""
+    phase: str = ""
+    done: int = 0
+    total: int = 0
+    failed: int = 0
+    pct: float = 0.0
+    message: str = ""
+    type: str = field(default=AUDIOBOOK_PROGRESS, init=False)
+
+
 def event_from_dict(data: dict[str, Any]) -> Event | None:
     """把 dict 还原成事件对象。前端回传历史或写测试时用。"""
     mapping: dict[str, type[Event]] = {
@@ -138,6 +158,7 @@ def event_from_dict(data: dict[str, Any]) -> Event | None:
         DONE: DoneEvent,
         ERROR: ErrorEvent,
         VISION_STATS: VisionStatsEvent,
+        AUDIOBOOK_PROGRESS: AudiobookProgressEvent,
     }
     cls = mapping.get(data.get("type", ""))
     if cls is None:
