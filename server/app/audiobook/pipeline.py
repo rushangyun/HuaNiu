@@ -70,14 +70,18 @@ async def parse_novel(
         roster: list[str] = []
         gender_hints: dict[str, str | None] = {}
 
-        total_blocks = sum(len(chunking.split_into_blocks(body)) for _, body in chapters)
+        # 先按句子切好，再按句子边界分批（无重叠）：
+        # - 无重叠 → 不会出现同一段被解析两次导致的重复落库
+        # - 句子边界分批 → 不会把一句话切断
+        chapter_sents = [(title, chunking.split_to_pieces(body)) for title, body in chapters]
+        total_blocks = sum(len(chunking.batch_sentences(p, 20)) for _, p in chapter_sents)
         done_blocks = 0
 
-        for ci, (title, body) in enumerate(chapters):
+        for ci, (title, sents) in enumerate(chapter_sents):
             chapter_id = repo.add_chapter(novel_id, ci, title)
-            blocks = chunking.split_into_blocks(body)
-            for block in blocks:
-                parsed = await parser.parse_block(block, roster, title, provider)
+            seg_idx = 0  # 章节级全局序号：避免每批都从 0 开始导致段落排序错乱
+            for batch in chunking.batch_sentences(sents, 20):
+                parsed = await parser.parse_sentences(batch, roster, title, provider)
                 # 把 LLM 回报的名册并入全局 roster（去重保序），并收集体别提示
                 for entry in parsed.get("speakers_seen", []):
                     if isinstance(entry, (list, tuple)) and len(entry) == 2:
@@ -90,13 +94,13 @@ async def parse_novel(
                         roster.append(name)
                     if name and name not in gender_hints and g:
                         gender_hints[name] = g
-                segs = parser.materialize(block, parsed)
-                for si, seg in enumerate(segs):
+                segs = parser.materialize(parsed)
+                for seg in segs:
                     if seg["speaker"] and seg["speaker"] not in roster:
                         roster.append(seg["speaker"])
                     repo.add_segment(
                         chapter_id,
-                        si,
+                        seg_idx,
                         kind=seg["kind"],
                         speaker=seg["speaker"],
                         text=seg["text"],
@@ -106,6 +110,7 @@ async def parse_novel(
                         speed=seg["speed"],
                         pause_before_ms=seg["pause_before_ms"],
                     )
+                    seg_idx += 1
                 done_blocks += 1
                 # 每章解析完推一次进度，避免前端一直空等
                 await bus.publish(

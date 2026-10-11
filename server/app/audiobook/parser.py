@@ -16,7 +16,6 @@ import logging
 import re
 
 from ..llm.provider import OpenAICompatProvider
-from .chunking import group_sentences, split_sentences
 from .normalize import normalize_for_tts
 
 log = logging.getLogger(__name__)
@@ -28,8 +27,10 @@ SYSTEM_PROMPT = """你是中文小说有声化的语音导演兼文本标注引�
 【最高原则】
 1. 原文句子已编号给出，你只需为每句打标签，绝不返回被你重写的句子。
 2. 所有文本内容保持与原文完全一致（含标点、引号、省略号）。
-3. 只有包含引号（" "『「 及其闭合号）的句子才可能是 dialogue；不含引号的叙述/描写/心理活动，
+3. 只有包含引号（" "『「 及其闭合号）的片段才可能是 dialogue；不含引号的叙述/描写/心理活动，
    kind 必须为 narration 且 speaker 必须为 null（由旁白朗读）。绝不要把旁白句误标成对白，更不可给旁白配角色声线。
+4. 说话人线索常跨片段：若某个叙述片段以「XX问/说/道/答，」结尾，
+   则紧随其后的引号片段由 XX 说出（例如「他压低声音问，」之后的引号仍是"他"在说话）。
 
 【每句要标注的字段】
 - kind: narration 叙述/描写/心理 | dialogue 带引号的人物对话 | poem 诗词/对联/书信 | quote 旁引/招牌/书名引用
@@ -63,10 +64,13 @@ USER_TPL = """【小说全局上下文】
 书名：{title}
 已出现的角色名册（请沿用同样的叫法，不要新造别名）：{roster_json}
 
-【待标注句子】
+【待标注片段】
 {sentences}
 
-（共 {n} 句，请务必输出 {n} 条 annotations，idx 从 0 到 {n_minus})"""
+注意：每一项可能是一整句，也可能只是**引号内的一句对白**、或**引号外的一段叙述**。
+请逐项判断，不要因为相邻项是对白就把叙述项也标成对白。
+
+（共 {n} 项，请务必输出 {n} 条 annotations，idx 从 0 到 {n_minus})"""
 
 
 def _extract_json(content: str) -> dict:
@@ -83,22 +87,22 @@ def _extract_json(content: str) -> dict:
     return json.loads(content[start : end + 1])
 
 
-async def parse_block(
-    block: str,
+async def parse_sentences(
+    sentences: list[str],
     roster: list[str],
     title: str,
     provider: OpenAICompatProvider | None,
-    block_start: int = 0,
 ) -> dict:
-    """解析一段原文（已切成句子）：LLM 逐句打标签，失败重试后降级规则兜底。
+    """给一批已切好的句子逐句打标签，失败重试后降级规则兜底。
 
-    这里不再让模型算字符偏移——偏移越界是 7B 模型最常犯的错（会一直生成到
-    超出文本长度、把输出撑爆截断）。改为「程序切句 + 模型只标注」，输出短且稳定。
+    两个踩过的坑，对应两条硬性设计约束：
+    1. 不让模型算字符偏移——7B 模型会把偏移算飞、输出越界后被 max_tokens 截断成坏 JSON。
+    2. 不预先把句子合并成"组"——组内只要有一句带引号，整组就会被标成对白，
+       组内旁白会被角色声线朗读。改为**逐句标注后再按 kind+speaker 归并**。
     """
     if provider is None:
-        return parse_block_rule(block)
+        return _rule_label(sentences)
 
-    sentences = group_sentences(split_sentences(block))
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
@@ -131,10 +135,10 @@ async def parse_block(
             anns = parsed.get("annotations")
             if not isinstance(anns, list):
                 raise ValueError("缺少 annotations 数组")
-            segments = []
+            per_sentence = []
             for i, s in enumerate(sentences):
                 a = anns[i] if i < len(anns) else {}
-                segments.append(_seg_from_annotation(s, a if isinstance(a, dict) else {}))
+                per_sentence.append(_seg_from_annotation(s, a if isinstance(a, dict) else {}))
             # speakers_seen 可能是 [{"name","gender"}] 或旧式 ["名字"]，统一规整为 (name, gender)
             raw_spk = parsed.get("speakers_seen", [])
             speakers = []
@@ -143,20 +147,44 @@ async def parse_block(
                     speakers.append((item.get("name"), item.get("gender")))
                 elif isinstance(item, str):
                     speakers.append((item, None))
-            return {"speakers_seen": speakers, "segments": segments}
+            return {"speakers_seen": speakers, "segments": merge_adjacent(per_sentence)}
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             log.warning("LLM 解析第 %d 次失败，重试：%s", attempt + 1, exc)
     log.warning("LLM 解析 3 次均失败，走规则兜底：%s", last_exc)
-    return parse_block_rule(block)
+    return _rule_label(sentences)
 
 
-def parse_block_rule(block: str) -> dict:
-    """纯规则兜底：按句子切，引号句尝试推断说话人，否则叙述。
+def merge_adjacent(segs: list[dict], max_chars: int = 120) -> list[dict]:
+    """把相邻且 kind+speaker 相同的句子合并成一个朗读单元。
+
+    铁律：**绝不跨 kind 合并**。旁白句与对白句必须分开落段，
+    否则一段旁白会因为邻居是对白而被整段配上角色声线
+    （实测最严重的一段：101 字旁白被主角声线朗读）。
+    """
+    out: list[dict] = []
+    for seg in segs:
+        if out:
+            prev = out[-1]
+            same_kind = prev["kind"] == seg["kind"]
+            same_spk = (prev.get("speaker") or None) == (seg.get("speaker") or None)
+            if (
+                same_kind
+                and same_spk
+                and len(prev["raw_text"]) + len(seg["raw_text"]) <= max_chars
+            ):
+                prev["raw_text"] = prev["raw_text"] + seg["raw_text"]
+                prev["text"] = normalize_for_tts(prev["raw_text"])
+                continue  # 停顿/情绪沿用前一段的
+        out.append(dict(seg))
+    return out
+
+
+def _rule_label(sentences: list[str]) -> dict:
+    """纯规则兜底：逐句判定，引号句尝试推断说话人，否则旁白。
 
     质量不如 LLM，但断网/模型没起时至少能出有声书。
     """
-    sentences = split_sentences(block)
     segments: list[dict] = []
     speakers_seen: list[str] = []
     for s in sentences:
@@ -176,15 +204,32 @@ def parse_block_rule(block: str) -> dict:
                 },
             )
         )
-    return {"speakers_seen": speakers_seen, "segments": segments}
+    return {
+        "speakers_seen": [(n, None) for n in speakers_seen],
+        "segments": merge_adjacent(segments),
+    }
+
+
+# 这些字出现在"疑似人名"里，几乎一定是短语而不是名字
+_NAME_NOISE = set("着我你他她它了的得地只还也又再不没是能把被将会可就都很哪")
 
 
 def _infer_speaker(sentence: str) -> str | None:
-    """引号句里，在引号前 6 字找"XX说/道/问"推断说话人（规则兜底用）。"""
+    """引号句里推断说话人（规则兜底用）。宁可判不出来，也绝不吐垃圾名字。
+
+    踩过的坑：放宽到 1~4 字时，「他压低声音问」会抽出"压低声音"、
+    「她小声说」抽出"她小声"、"老掌柜抢先答道"抽出"抢先答"——全是短语。
+    所以收紧到 2~3 字且不含常见虚词/动词；拿不准返回 None（自动落为旁白）。
+    """
     if not re.search(r"[“\"『「]", sentence):
         return None
-    m = re.search(r"([一-龥]{1,4})(?:说|道|问|答|喊|叫|轻声|冷笑|叹|喃喃|回|应)\s*[:：]?", sentence)
-    return m.group(1) if m else None
+    m = re.search(r"([一-龥]{2,3})(?:说|道|问|答|喊|叫|轻声|冷笑|叹|喃喃|回|应)\s*[:：]?", sentence)
+    if not m:
+        return None
+    name = m.group(1)
+    if any(ch in _NAME_NOISE for ch in name):
+        return None
+    return name
 
 
 # 对白必须带引号，否则强制作旁白（修复「旁白被角色声线替代」）
@@ -214,7 +259,7 @@ def _seg_from_annotation(text: str, a: dict) -> dict:
     }
 
 
-def materialize(block: str, parsed: dict) -> list[dict]:
+def materialize(parsed: dict) -> list[dict]:
     """把解析结果转成待落库的 segment 列表。文本已在上游回填，这里只做归一化兜底。"""
     out: list[dict] = []
     for s in parsed.get("segments", []):

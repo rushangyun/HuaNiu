@@ -85,25 +85,62 @@ def split_sentences(text: str) -> list[str]:
     return out
 
 
-def group_sentences(sentences: list[str], min_chars: int = 30, max_chars: int = 120) -> list[str]:
-    """把过碎的句子合并成 30~120 字的可朗读单元。
+# 成对的引号包裹的引用块
+_QUOTE_SPAN = re.compile(r"[“\"『「][^”\"』」]*[”\"』」]")
 
-    split_sentences 会按每个句末标点切，一段 800 字往往被切成 40+ 句，
-    直接让 LLM 逐句标注会撑爆输出 token。先把相邻句子合并到合理长度，
-    既符合「朗读单元 25~120 字」的设计，又大幅减少标注条数。
+
+def split_by_quote(sentence: str) -> list[str]:
+    """把一句按「引号内 / 引号外」切成若干片段。
+
+    为什么必须再切一刀：一句常常长这样——
+        「林昭走到门边，没有立刻开门，只隔着门板问：'谁？'」
+    整句送标会被打成 dialogue，于是前半句**旁白**也被主角声线朗读。
+    切开之后，引号外的部分天然是旁白、引号内天然是对白，
+    配合 parser 里「无引号必为 narration」的强制规则，
+    旁白再也不会被角色声线覆盖。
     """
-    groups: list[str] = []
-    buf = ""
-    for s in sentences:
-        if buf and len(buf) + len(s) > max_chars:
-            groups.append(buf)
-            buf = s
-        else:
-            buf = (buf + s) if buf else s
-    if buf:
-        groups.append(buf)
-    # 太短的首段并入后一段，避免开头出现一两个字的碎段
-    if len(groups) > 1 and len(groups[0]) < min_chars:
-        groups[1] = groups[0] + groups[1]
-        groups.pop(0)
-    return groups
+    pieces: list[str] = []
+    pos = 0
+    for m in _QUOTE_SPAN.finditer(sentence):
+        if m.start() > pos:
+            pieces.append(sentence[pos : m.start()])
+        pieces.append(m.group(0))
+        pos = m.end()
+    if pos < len(sentence):
+        pieces.append(sentence[pos:])
+    return [p for p in pieces if p.strip()]
+
+
+def split_to_pieces(body: str) -> list[str]:
+    """章正文 → 朗读片段序列（引号内 = 对白，其余 = 旁白）。
+
+    ⚠️ 顺序至关重要：**先按引号切，再在非引号区里按句切**。
+    反过来（先按句、再按引号）会把跨句的引号打断——中文里 ？/！ 常在引号内，
+    例如「……“你确定吗？”……」按句切会把一个完整引号从 ？ 处劈成两半，
+    后半段带着悬空引号被当成对白，于是旁白又被角色声线朗读。
+    先按引号切，引号整体永不被拆开，旁白区也不会残留引号碎片。
+    """
+    pieces: list[str] = []
+    pos = 0
+    for m in _QUOTE_SPAN.finditer(body):
+        if m.start() > pos:
+            pieces.extend(split_sentences(body[pos : m.start()]))
+        pieces.append(m.group(0))
+        pos = m.end()
+    if pos < len(body):
+        pieces.extend(split_sentences(body[pos:]))
+    return [p for p in pieces if p.strip()]
+
+
+def batch_sentences(sentences: list[str], max_per_batch: int = 25) -> list[list[str]]:
+    """按句子边界分批，每批交给 LLM 标注。
+
+    ⚠️ 不要用「800 字块 + 100 字重叠」再切句：重叠段会被解析两次、落库两次
+    （实测 881 字原文被拼出 978 字，重复 97 字），且重复段落顺序错乱看起来像缺失。
+    按句子边界分批既不切断句子，也天然无重叠。
+    每批句子数受限，也顺带保证 LLM 输出不会撑爆 max_tokens。
+    """
+    return [
+        sentences[i : i + max_per_batch]
+        for i in range(0, len(sentences), max_per_batch)
+    ]
