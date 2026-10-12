@@ -261,7 +261,15 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
    push/PR 到 master 时跑 ① `gen_event_types.py --check` ② `pytest tests/`。
    兑现第三节「CI 里跑一次，不一致就报错」的承诺（此前该承诺一直没落地）。
    为配合 CI，已给 `gen_event_types.py` 增加 `--check` 参数（只校验不写文件）。
-4. ⬜ **YOLO 训练 B 方案续跑**（3 小时 GPU，建议夜间挂机）— 代码就绪，`best.pt` 现停 34 epoch。
+4. 🟡 **YOLO 训练续跑（进行中）** — 已从 `last.pt` 挂上 100 epoch 后台训练。
+   ⚠️ **不要用 `--resume`**：`last.pt` 是正常结束保存的（非中断），没有可恢复状态；
+   且 resume 分支没带 `data`，会退回 ultralytics 默认的 `coco8.yaml` 并因 SSL 失败报错。
+   正确命令（已验证 `data=training/configs/voc.yaml`、`device=0`）：
+   ```bash
+   ./.venv/Scripts/python.exe training/train.py \
+       --model runs/detect/runs/train/voc_yolov8n/weights/last.pt --epochs 100
+   ```
+   收尾时检查新 `best.pt` 的 mAP 是否高于现有的 0.804，再决定是否覆盖 `models/yolo/best.pt`。
 5. ⬜ **有声书增强项** — 情绪真正调制语音、piper 离线开箱、整本几十万字压测、角色名册跨块归并。
 
 ---
