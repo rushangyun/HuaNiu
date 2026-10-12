@@ -261,7 +261,12 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
    push/PR 到 master 时跑 ① `gen_event_types.py --check` ② `pytest tests/`。
    兑现第三节「CI 里跑一次，不一致就报错」的承诺（此前该承诺一直没落地）。
    为配合 CI，已给 `gen_event_types.py` 增加 `--check` 参数（只校验不写文件）。
-4. 🟡 **YOLO 训练续跑（进行中）** — 已从 `last.pt` 挂上 100 epoch 后台训练。
+4. ✅ **YOLO 训练续跑（已完成）** — 结果 **mAP50 = 0.8143**（原 0.804，**+0.010**），mAP50-95 = 0.6027，
+   用时 2499 秒（41.7 分钟），**第 21 轮早停**（`patience=20`）。新权重已导出到 `models/yolo/best.pt`。
+   - ⚠️ 重要发现：早停日志 `Best results observed at epoch 1` —— **第 1 轮就是最优**，
+     后续 20 轮都没超过它，说明模型在此数据集上已接近饱和，继续训练几乎无收益。
+     这个结论本身对 harness（自主实验闭环）有价值：可作为"何时停止搜索"的依据。
+
    ⚠️ **不要用 `--resume`**：`last.pt` 是正常结束保存的（非中断），没有可恢复状态；
    且 resume 分支没带 `data`，会退回 ultralytics 默认的 `coco8.yaml` 并因 SSL 失败报错。
    正确命令（已验证 `data=training/configs/voc.yaml`、`device=0`）：
