@@ -20,3 +20,6 @@ python-multipart>=0.0.9
 # 可选：实时视觉（YOLO）。取消注释即可启用视觉面板。
 # torch>=2.1
 # ultralytics>=8.1
+
+# 测试（tests/ 目录，pytest 最小套件）
+pytest>=8.0

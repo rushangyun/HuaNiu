@@ -159,6 +159,16 @@ def render(constants, classes) -> str:
 
 
 def main() -> None:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="从 events.py 生成（或校验）前端 TS 类型")
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="只校验 web/src/types/events.ts 是否与 events.py 一致，不写文件（给 CI 用）",
+    )
+    args = ap.parse_args()
+
     if not EVENTS_PY.is_file():
         print(f"找不到 {EVENTS_PY}", file=sys.stderr)
         sys.exit(1)
@@ -168,8 +178,22 @@ def main() -> None:
         print("没解析到任何事件类，检查 events.py 的结构", file=sys.stderr)
         sys.exit(1)
 
+    content = render(constants, classes)
+
+    if args.check:
+        current = OUT_TS.read_text(encoding="utf-8") if OUT_TS.is_file() else ""
+        if current.strip() != content.strip():
+            print(
+                "❌ 事件契约已漂移：server/app/core/events.py 与 web/src/types/events.ts 不一致。\n"
+                "   请运行：python scripts/gen_event_types.py",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        print(f"✅ 事件契约一致（常量 {len(constants)} 个，事件类 {len(classes)} 个）")
+        return
+
     OUT_TS.parent.mkdir(parents=True, exist_ok=True)
-    OUT_TS.write_text(render(constants, classes), encoding="utf-8")
+    OUT_TS.write_text(content, encoding="utf-8")
     print(f"已生成 {OUT_TS.relative_to(ROOT)}")
     print(f"  常量 {len(constants)} 个，事件类 {len(classes)} 个：")
     for cls_name, event_type, _ in classes:

@@ -250,10 +250,17 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
    `server/app/` 下 9 份（app, core, llm, agent, agent/tools, vision, transport, api, audiobook）、
    `web/src/` 下 4 份（src, api, hooks, components）。每份写明「干什么 + 为什么不这么干不行」，
    并记录了本项目真实踩过的坑（延迟加载 torch、SSE `[DONE]` 撞名、进度流不回刷内容等）。
-2. ⬜ **加 pytest 最小套件**（约 15~20 分钟）— 覆盖文本归一化、切分保真（覆盖率 100% 检查）、
-   事件契约→TS 生成一致性。
-3. ⬜ **加 GitHub Actions**（约 5 分钟）— 跑契约校验 + pytest，兑现第三节
-   「CI 里跑一次，不一致就报错」的承诺（**目前该承诺未落地**）。
+2. ✅ **加 pytest 最小套件** — **已完成（12 个用例全绿）**，见 `tests/`：
+   - `test_normalize.py`：年份/章节号/百分数/量词转换 + 「绝不润色改写」 + 空值安全
+   - `test_chunking.py`：**切分保真**（片段拼回 == 原文）、**跨句引号不被劈开**、
+     分批无重叠、**归并绝不跨 kind**（旁白与对白不合并）
+   - `test_event_contract.py`：跑 `gen_event_types.py --check`，契约漂移即失败
+   - `conftest.py`：把 `server/` 加入 `sys.path`，测试可直接 `from app...`
+   - `pytest>=8.0` 已写入 `server/requirements.txt`
+3. ✅ **加 GitHub Actions** — **已完成**，`.github/workflows/ci.yml`：
+   push/PR 到 master 时跑 ① `gen_event_types.py --check` ② `pytest tests/`。
+   兑现第三节「CI 里跑一次，不一致就报错」的承诺（此前该承诺一直没落地）。
+   为配合 CI，已给 `gen_event_types.py` 增加 `--check` 参数（只校验不写文件）。
 4. ⬜ **YOLO 训练 B 方案续跑**（3 小时 GPU，建议夜间挂机）— 代码就绪，`best.pt` 现停 34 epoch。
 5. ⬜ **有声书增强项** — 情绪真正调制语音、piper 离线开箱、整本几十万字压测、角色名册跨块归并。
 

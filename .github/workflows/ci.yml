@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装后端依赖
+        # 只装核心 + pytest。torch/ultralytics 体积大且视觉是可选能力，CI 不装。
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt
+
+      - name: 事件契约一致性校验
+        # 前后端解耦的前提：Python 的 events.py 是唯一事实来源，
+        # 生成的 TS 不能漂移。手抄类型是解耦架构最常见的翻车方式。
+        run: python scripts/gen_event_types.py --check
+
+      - name: 跑测试
+        run: python -m pytest tests/ -q
