@@ -22,6 +22,47 @@
 
 ---
 
+## 2026-10-12 · Day 4：补齐完善度短板（README / 测试 / CI）+ 训练续跑踩坑
+
+### 做了什么（按 PLAN 9.5 开工清单执行）
+1. **补 13 个二级子模块 README（13/13）**：`server/app/` 下 9 份（app, core, llm, agent, agent/tools,
+   vision, transport, api, audiobook）+ `web/src/` 下 4 份（src, api, hooks, components）。
+   写法「干什么 + 为什么不这么干不行」，并把真实踩坑写进去（延迟加载 torch、SSE `[DONE]` 撞名、
+   进度流不回刷内容、跨句引号被劈开、重叠分批重复落库、工具异常转字符串让模型自纠）。
+2. **建 `tests/`（pytest，12 用例全绿）**：`conftest.py`（把 `server/` 加进 `sys.path`）
+   + `test_normalize` + `test_chunking` + `test_event_contract`。
+   把 10-11 修 bug 的经验固化成回归断言：**切分保真**（拼回==原文）、**跨句引号不被劈开**、
+   分批无重叠、**归并绝不跨 kind**（防 101 字旁白被角色声线读）。
+   `pytest>=8.0` 写入 `server/requirements.txt`。
+3. **加 `.github/workflows/ci.yml`**：push/PR 跑 ① `gen_event_types.py --check` ② `pytest tests/`。
+   为配合 CI 给生成脚本新增 `--check` 参数（只校验不写文件，漂移则 exit 1）。
+   **兑现了 PLAN 第三节「CI 里跑一次，不一致就报错」此前一直没落地的承诺。**
+4. 起全套服务（后端 :8000 / 前端 :5173 均 200）。
+
+### 踩坑：`--resume` 不能用，且失败得很隐蔽
+- **现象**：`python training/train.py --resume` 直接失败：
+  `RuntimeError: Dataset 'coco8.yaml' error ... Download failure for coco8.zip（SSL 证书验证失败）`。
+- **根因**：
+  1. `runs/.../voc_yolov8n/weights/last.pt` 被判为 **not a resumable training checkpoint** ——
+     上次训练是**正常结束**保存的，不是中途崩溃，所以没有可恢复的 epoch/optimizer 状态；
+  2. ultralytics 因此退回"新训练"，而 resume 分支**只传了 `resume=True`，没带 `data`**，
+     于是 `data` 用了 ultralytics 默认值 **`coco8.yaml`**（不是我们的 VOC），
+     接着去下载 coco8.zip，撞上本机代理的 SSL 证书验证失败 → 报错退出。
+- **正确做法**：这种情况不该用 `--resume`，而应把 `last.pt` 当**预训练起点**正常训练：
+  ```bash
+  ./.venv/Scripts/python.exe training/train.py \
+      --model runs/detect/runs/train/voc_yolov8n/weights/last.pt --epochs 100
+  ```
+  实测已确认 `data=training/configs/voc.yaml`、`device=0`、正常迭代（~8.8 it/s）。
+- **待改进**：`train.py` 的 resume 分支应显式带上 `data/epochs/imgsz/...`，
+  这样即使 ultralytics 退回新训练也不会跑到默认的 coco8 上（本次未改，避免影响正在跑的训练）。
+
+### 训练状态
+- 已从 `last.pt` 起挂上 100 epoch 续跑（后台，预计数小时；`patience=20` 早停）。
+- 环境：torch 2.11.0+cu128，CUDA 可用；ultralytics 8.4.174。
+
+---
+
 ## 2026-10-11（续）· 有声书解析质量与角色声线修复
 
 ### 用户反馈的两个问题
@@ -54,6 +95,8 @@
 - 前端没有「重新解析」「情绪/语速试听单段」等便捷按钮，目前只能靠新建或调 reparse 接口。
 
 ---
+
+## 2026-10-11 · 有声书 MVP 落地（前端收尾 + 端到端验证）
 
 ### 做了什么
 创意作品（AI 有声小说网页）从后端打通补成完整 MVP：
