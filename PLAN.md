@@ -246,9 +246,10 @@ main.py  ──►  api  ──►  agent  ──►  llm   ──►  core
 
 依据 2026-10-11 晚的**项目完善度审查**（结论见当日 memory 日志）排优先级：
 
-1. ⬜ **补 13 个二级子模块 README**（约 25 分钟）— 命中题目「每个功能文件夹有 README」。
-   缺：`server/app/{core,llm,agent,vision,transport,api,audiobook,agent/tools}`、
-   `web/src/{src,api,hooks,components}`。每份 5~15 行。
+1. ✅ **补 13 个二级子模块 README** — **已完成（13/13）**，命中题目「每个功能文件夹有 README」。
+   `server/app/` 下 9 份（app, core, llm, agent, agent/tools, vision, transport, api, audiobook）、
+   `web/src/` 下 4 份（src, api, hooks, components）。每份写明「干什么 + 为什么不这么干不行」，
+   并记录了本项目真实踩过的坑（延迟加载 torch、SSE `[DONE]` 撞名、进度流不回刷内容等）。
 2. ⬜ **加 pytest 最小套件**（约 15~20 分钟）— 覆盖文本归一化、切分保真（覆盖率 100% 检查）、
    事件契约→TS 生成一致性。
 3. ⬜ **加 GitHub Actions**（约 5 分钟）— 跑契约校验 + pytest，兑现第三节
