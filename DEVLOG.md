@@ -22,6 +22,49 @@
 
 ---
 
+## 2026-10-13 · Day 5：第②步 n 收敛确认 + 第③步换 yolov8s（mAP50 0.798 → 0.862）
+
+### 提交与推送
+- 提交昨日未提交的 harness 改动（EXCLUSIONS 三文件）与交接文档：`8b39195`、`5199a4b`，已推 `origin/master`。
+- **修掉一个推送隐患**：git global 的 `http.https://github.com.proxy` 指向死端口 `10383`，
+  而本地代理实际监听 `9154`；因「按 URL 的代理配置」优先级**高于**环境变量，每次推送都硬撞死端口。
+  已改为 `9154`，普通 `git push` 验证通过（此前必须 `git -c http.https://github.com.proxy=...` 才能推）。
+
+### 第②步：yolov8n 训到收敛 —— 再次证明"轮数已饱和"
+- 配置 `--model last.pt --epochs 100 --batch 32`，**第 21 轮早停，最佳出现在 epoch 1**。
+- mAP50=0.7983 / mAP50-95=0.5765 / P=0.7868 / R=0.7198，用时 41m14s。
+- 从已收敛 checkpoint 继续训、第 1 轮就是最好 → 加轮数不再涨点，`EXCLUSIONS` 结论再次被验证。
+  n 的 mAP50 实际只在 ~0.80±0.02 波动（harness 同配置曾得 0.8215，属噪声）。
+
+### 第③步：换 yolov8s 重训 —— 真正提精度（今日核心成果）
+**取权重踩了两个坑**（本机无 `yolov8s.pt`，必须联网）：
+1. `SSLCertVerificationError`：本地代理做 HTTPS 中间人，其自签 CA 只在 Windows 证书库里
+   （所以 git 能通），Python `requests`/certifi 不认它 → 校验失败。
+   Windows `curl.exe` 走 Schannel 同样失败：`CRYPT_E_NO_REVOCATION_CHECK`（吊销检查端点连不上）。
+2. **单次响应被截断**：服务器声明 `content-length=22588772`，但每次只收到 ~2.6MB 就被切断。
+- **解法**：`curl -k -L -C - --max-time 150 -o <file> <url>` **循环断点续传**，
+  共 16 轮、约 38 分钟凑齐 `22,588,772` 字节（与 content-length 完全一致）。
+- **校验**：`torch.load` 参数量 **11,166,560**（≈11.17M，s 规模；对照 n=3,009,548）。
+
+**训练**：19:13 启动，`--model models/yolo/yolov8s.pt --name voc_yolov8s --batch 16 --epochs 100 --patience 20`。
+`Model summary: 129 layers, 11,143,340 parameters, 28.7 GFLOPs`，`nc=80→20`，显存 3.6~3.8G，
+实测约 **3.1 分钟/轮**。第 19 轮（20:13）mAP50 已达 0.802，**越过 n 的 0.7983**。
+
+**23:20 安全中止**：跑到第 **74/100** 轮仍未触发早停（mAP50-95 一直在 0.662→0.664 之间微涨，
+不断重置 patience 计数器）。按计划中止；中止前 `best.pt`/`last.pt` 均已完整落盘，**无损坏风险**。
+
+### 结果对比（对 `models/yolo/best.pt` 独立验证）
+| 指标 | yolov8n（第②步最终） | **yolov8s（第③步，74 轮）** | 增益 |
+|---|---|---|---|
+| **mAP50** | 0.7983 | **0.8615** | **+0.063** |
+| **mAP50-95** | 0.5765 | **0.6643** | **+0.088** |
+| Precision | 0.7868 | 0.8344 | +0.048 |
+| Recall | 0.7198 | 0.8042 | +0.084 |
+
+> 注：s 是在**未跑满**（74/100，且已明显平台化）的情况下取得的，继续训练增益极有限。
+> 权重已复制到 `models/yolo/best.pt`，后端重启后 `/api/health` 确认 `就绪（自训练 VOC 模型）`。
+> 日志里 `yolo26n.pt` 下载失败是 ultralytics 内部辅助检查撞了同一个 SSL 坑，**非致命**。
+
 ## 2026-10-12 · Day 4：补齐完善度短板（README / 测试 / CI）+ 训练续跑踩坑
 
 ### 做了什么（按 PLAN 9.5 开工清单执行）
