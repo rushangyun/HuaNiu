@@ -35,7 +35,7 @@ if str(_ROOT) not in sys.path:
 from harness.experiment import (  # noqa: E402
     Experiment, append, load_all, reset, STATUS_OK, REPORT,
 )
-from harness.space import Budget, param_names  # noqa: E402
+from harness.space import Budget, param_names, EXCLUSIONS  # noqa: E402
 from harness.runner import ExperimentRunner  # noqa: E402
 from harness.decide import decide_next  # noqa: E402
 
@@ -61,6 +61,8 @@ def update_best(exp: Experiment, history: list[Experiment]) -> None:
 
 
 def write_report(history: list[Experiment], budget: Budget) -> None:
+    # 兜底：若还没跑过任何 trial，runs/harness/ 可能不存在，先建好再写报告
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
     ok = [e for e in history if e.status == STATUS_OK]
     oom = [e for e in history if e.status == "oom"]
     failed = [e for e in history if e.status == "failed"]
@@ -91,6 +93,13 @@ def write_report(history: list[Experiment], budget: Budget) -> None:
         for e in oom:
             lines.append(f"- {e.summary_line()}")
 
+    if EXCLUSIONS:
+        lines += ["", "## 数据驱动的搜索结论（闭环学到的）"]
+        for x in EXCLUSIONS:
+            lines.append(f"- **{x.dimension}**：{x.verdict}")
+            lines.append(f"  - 证据：{x.evidence}")
+            lines.append(f"  - 应改试：{x.try_instead}")
+
     REPORT.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -102,6 +111,15 @@ def main() -> None:
     ap.add_argument("--llm", action="store_true", help="让本地大模型当决策顾问")
     ap.add_argument("--reset", action="store_true", help="清空历史重来")
     args = ap.parse_args()
+
+    # 用实验结论拦一道：本任务训练轮数已饱和，调大 epochs 不会提精度，只会更费时。
+    if args.epochs > 20:
+        print(
+            f"[Harness] ⚠️ 警告：--epochs 设到了 {args.epochs}，但本任务已用实验证明"
+            "训练轮数早已饱和（yolov8n/VOC 在 epoch 1 即达最优 mAP50，"
+            "epoch 21 触发早停）。调大 epochs 不会提升 mAP，只会更费时间；"
+            "预算应投向模型规模 / 数据增强，而非更长训练。\n"
+        )
 
     if args.reset:
         reset()

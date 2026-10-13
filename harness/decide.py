@@ -14,7 +14,7 @@ import json
 import urllib.request
 
 from .experiment import Experiment
-from .space import SEARCH_SPACE, DEFAULTS, Budget, clamp_to_space, param_names
+from .space import SEARCH_SPACE, DEFAULTS, Budget, clamp_to_space, param_names, EXCLUSIONS
 from .strategy import build_pool, prune_with_history
 
 OLLAMA_URL = "http://127.0.0.1:11434/v1/chat/completions"
@@ -47,12 +47,19 @@ def _ask_llm(history: list[Experiment], budget: Budget) -> dict | None:
     space_desc = "\n".join(
         f"  - {p.name}: 候选 {p.values}（{p.desc}）" for p in SEARCH_SPACE
     )
+    excl_desc = "\n".join(
+        f"  - {x.dimension}：{x.verdict}。证据：{x.evidence} "
+        f"应改试：{x.try_instead}" for x in EXCLUSIONS
+    ) or "（无）"
     hist_lines = [e.summary_line() for e in history] or ["（暂无历史）"]
     prompt = (
         "你在一个 YOLO 超参搜索闭环里当决策顾问。\n"
         f"可搜参数与合法候选：\n{space_desc}\n\n"
+        "已用实验数据排除、不要再浪费预算的维度：\n"
+        f"{excl_desc}\n\n"
         "已做实验：\n" + "\n".join(hist_lines) + "\n\n"
-        "请推荐下一组要试的超参，只从上面候选里选，避免已 OOM 的 batch/imgsz。"
+        "请推荐下一组要试的超参，只从上面候选里选，避免已 OOM 的 batch/imgsz，"
+        "也**不要**建议通过'训更久/调大 epochs'来提精度——这已被实验证明无效。"
         "只输出一个 JSON 对象，例如 "
         '{"lr0":0.01,"batch":16,"imgsz":640,"momentum":0.937,'
         '"weight_decay":0.0005,"warmup_epochs":3.0}，不要解释。'
