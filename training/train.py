@@ -65,6 +65,16 @@ class TrainConfig:
     mixup: float = 0.0
     copy_paste: float = 0.0
 
+    # --- 必须显式指定的两个"陷阱参数" ---
+    # 1) optimizer：ultralytics 默认是 "auto"，而 auto 分支会
+    #    **忽略传入的 lr0 和 momentum**，改用自己算的 lr_fit=0.002*5/(4+nc) 与 momentum=0.9，
+    #    并把优化器换成 AdamW。结果是"改了 lr0 但训练曲线一模一样"。
+    #    我们的 lr0=0.01 / momentum=0.937 本来就是 YOLOv8 的 SGD 经典值，所以显式写 SGD。
+    optimizer: str = "SGD"
+    # 2) close_mosaic：最后 N 轮关闭 mosaic。当 close_mosaic >= epochs 时
+    #    mosaic **全程不生效**，于是"搜 mosaic"变成白搜。短程试验会自动置 0（见 train()）。
+    close_mosaic: int = 10
+
     # --- 工程参数 ---
     workers: int = 2           # Windows 上开太大容易卡住数据加载
     patience: int = 20         # 多少轮没提升就早停
@@ -117,7 +127,8 @@ def train(cfg: TrainConfig) -> dict:
             k: v for k, v in asdict(cfg).items()
             if k in ("epochs", "imgsz", "batch", "lr0", "lrf", "momentum",
                      "weight_decay", "warmup_epochs", "model",
-                     "mosaic", "mixup", "copy_paste")
+                     "mosaic", "mixup", "copy_paste",
+                     "optimizer", "close_mosaic")
         },
         "metrics": {},
         "wall_time_sec": 0.0,
@@ -146,6 +157,10 @@ def train(cfg: TrainConfig) -> dict:
                 mosaic=cfg.mosaic,
                 mixup=cfg.mixup,
                 copy_paste=cfg.copy_paste,
+                # 短程试验（如 harness 的 8 轮）必须让 close_mosaic=0，
+                # 否则 mosaic 全程被关闭，等于没增强。
+                close_mosaic=(0 if cfg.epochs < 20 else cfg.close_mosaic),
+                optimizer=cfg.optimizer,
                 device=cfg.device,
                 workers=cfg.workers,
                 patience=cfg.patience,
@@ -254,6 +269,9 @@ def parse_args() -> TrainConfig:
     p.add_argument("--mosaic", type=float, default=d.mosaic)
     p.add_argument("--mixup", type=float, default=d.mixup)
     p.add_argument("--copy-paste", type=float, default=d.copy_paste)
+    p.add_argument("--optimizer", default=d.optimizer,
+                   help="不要用 auto：auto 会忽略 lr0/momentum")
+    p.add_argument("--close-mosaic", type=int, default=d.close_mosaic)
     p.add_argument("--workers", type=int, default=d.workers)
     p.add_argument("--patience", type=int, default=d.patience)
     p.add_argument("--name", default=d.name)
