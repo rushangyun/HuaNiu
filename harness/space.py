@@ -33,7 +33,9 @@ class Param:
 
 # 默认值：跑普通训练时用的那组（training/train.py 的 TrainConfig 默认值）
 DEFAULTS: dict = {
-    "lr0": 0.01,
+    # 0.001 而非 0.01：8 轮对照实验里 lr0=0.001 得 mAP50=0.8151，lr0=0.01 只有 0.7700，
+    # 差 0.045，比任何数据增强参数的差异都大（详见 DEVLOG 2026-10-14）。
+    "lr0": 0.001,
     "batch": 16,
     "imgsz": 640,
     "momentum": 0.937,
@@ -51,10 +53,10 @@ DEFAULTS: dict = {
 # 所以把 EXCLUSIONS 点名的"真正有效方向"——数据增强——放在最前面先搜，
 # 那些已被证明收益很小的数值型超参往后排。
 SEARCH_SPACE: list[Param] = [
-    Param("mosaic", [0.0, 0.5, 1.0], "马赛克增强概率，1.0 是 ultralytics 默认，0.0=彻底关闭"),
-    Param("mixup", [0.0, 0.1, 0.3], "MixUp 混合增强概率，默认关闭"),
-    Param("copy_paste", [0.0, 0.1, 0.3], "Copy-Paste 增强概率，默认关闭"),
-    Param("lr0", [0.001, 0.005, 0.01, 0.02], "初始学习率，最影响收敛速度"),
+    Param("mosaic", [0.0, 0.5, 1.0], "马赛克增强概率，1.0 最好（0.7700），0.0 最差（0.7435）"),
+    Param("mixup", [0.0, 0.1, 0.3], "MixUp 概率，默认 0.0 最好（0.7700），越大越差"),
+    # copy_paste 已从搜索空间移除：实验证明它对纯框检测是空操作（见下方 EXCLUSIONS）
+    Param("lr0", [0.0005, 0.001, 0.002, 0.005], "初始学习率，最大杠杆：0.001→0.8151，0.01→0.7700"),
     Param("batch", [8, 16, 32], "批大小，受显存硬约束，太大直接 OOM"),
     Param("imgsz", [480, 640], "输入分辨率，越大越准但越慢越吃显存"),
     Param("momentum", [0.9, 0.937, 0.98], "SGD 动量"),
@@ -92,6 +94,16 @@ EXCLUSIONS: list[Exclusion] = [
                      "mAP50-95 从 0.5765 涨到 0.6643）、调数据增强（mosaic / mixup / "
                      "copy_paste，现已作为可搜索维度加进 SEARCH_SPACE）、"
                      "改用 cos_lr 调度 + 更小 lr0。"),
+    ),
+    Exclusion(
+        dimension="Copy-Paste 增强 (copy_paste)",
+        verdict="对纯框检测是空操作，调它不改变任何结果",
+        evidence=("修复超参覆盖后重跑的对照实验：copy_paste=0.1 与 0.3 两组的 mAP50 "
+                  "都是 0.7700，与不开增强的基线 0.7700 **完全相同**；"
+                  "而同期 mosaic/mixup/lr0 都产生了可见差异，说明只有这项真的没生效。"
+                  "原因是 ultralytics 的 copy-paste 需要分割掩码(segments)，"
+                  "纯检测框数据里没有，所以恒等于关闭。"),
+        try_instead=("把预算给 mosaic / mixup / lr0 —— 这三项实测都有效果。"),
     ),
 ]
 
