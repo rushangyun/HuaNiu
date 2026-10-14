@@ -15,7 +15,7 @@ import urllib.request
 
 from .experiment import Experiment
 from .space import SEARCH_SPACE, DEFAULTS, Budget, clamp_to_space, param_names, EXCLUSIONS
-from .strategy import build_pool, prune_with_history
+from .strategy import baseline, build_pool, prune_with_history
 
 OLLAMA_URL = "http://127.0.0.1:11434/v1/chat/completions"
 LLM_MODEL = "qwen2.5:7b-instruct"
@@ -61,8 +61,9 @@ def _ask_llm(history: list[Experiment], budget: Budget) -> dict | None:
         "请推荐下一组要试的超参，只从上面候选里选，避免已 OOM 的 batch/imgsz，"
         "也**不要**建议通过'训更久/调大 epochs'来提精度——这已被实验证明无效。"
         "只输出一个 JSON 对象，例如 "
-        '{"lr0":0.01,"batch":16,"imgsz":640,"momentum":0.937,'
-        '"weight_decay":0.0005,"warmup_epochs":3.0}，不要解释。'
+        '{"mosaic":1.0,"mixup":0.0,"copy_paste":0.0,"lr0":0.01,"batch":16,'
+        '"imgsz":640,"momentum":0.937,"weight_decay":0.0005,'
+        '"warmup_epochs":3.0}，不要解释。'
     )
     try:
         payload = json.dumps({

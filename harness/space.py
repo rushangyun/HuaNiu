@@ -39,10 +39,21 @@ DEFAULTS: dict = {
     "momentum": 0.937,
     "weight_decay": 0.0005,
     "warmup_epochs": 3.0,
+    # 与 ultralytics 默认一致：mosaic 默认开(1.0)，mixup / copy_paste 默认关(0.0)
+    "mosaic": 1.0,
+    "mixup": 0.0,
+    "copy_paste": 0.0,
 }
 
 
+# SEARCH_SPACE 的**顺序是有意义的**：候选池按这个顺序生成，
+# 而 Budget.max_trials 通常只有 8 次，排在后面的参数很可能一次都轮不到试。
+# 所以把 EXCLUSIONS 点名的"真正有效方向"——数据增强——放在最前面先搜，
+# 那些已被证明收益很小的数值型超参往后排。
 SEARCH_SPACE: list[Param] = [
+    Param("mosaic", [0.0, 0.5, 1.0], "马赛克增强概率，1.0 是 ultralytics 默认，0.0=彻底关闭"),
+    Param("mixup", [0.0, 0.1, 0.3], "MixUp 混合增强概率，默认关闭"),
+    Param("copy_paste", [0.0, 0.1, 0.3], "Copy-Paste 增强概率，默认关闭"),
     Param("lr0", [0.001, 0.005, 0.01, 0.02], "初始学习率，最影响收敛速度"),
     Param("batch", [8, 16, 32], "批大小，受显存硬约束，太大直接 OOM"),
     Param("imgsz", [480, 640], "输入分辨率，越大越准但越慢越吃显存"),
@@ -77,8 +88,10 @@ EXCLUSIONS: list[Exclusion] = [
         evidence=("yolov8n / VOC 完整训练：最优 mAP50=0.81445 出现在 epoch 1，"
                   "此后 20 轮始终未能超过，patience=20 于 epoch 21 触发早停；"
                   "最终 mAP50=0.8143。"),
-        try_instead=("换更大模型（yolov8s / yolov8m 起步重训）、加数据增强"
-                     "（mosaic / mixup / copy_paste）、改用 cos_lr 调度 + 更小 lr0。"),
+        try_instead=("换更大模型（已验证：yolov8s 重训让 mAP50 从 0.7983 涨到 0.8615，"
+                     "mAP50-95 从 0.5765 涨到 0.6643）、调数据增强（mosaic / mixup / "
+                     "copy_paste，现已作为可搜索维度加进 SEARCH_SPACE）、"
+                     "改用 cos_lr 调度 + 更小 lr0。"),
     ),
 ]
 

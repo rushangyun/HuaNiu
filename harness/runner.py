@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 from .experiment import Experiment, STATUS_OK, STATUS_OOM, STATUS_FAILED
-from .space import Budget
+from .space import Budget, DEFAULTS
 
 ROOT = Path(__file__).resolve().parents[1]
 TRAIN_SCRIPT = ROOT / "training" / "train.py"
@@ -47,6 +47,10 @@ class ExperimentRunner:
             "--momentum", str(params["momentum"]),
             "--weight-decay", str(params["weight_decay"]),
             "--warmup-epochs", str(params["warmup_epochs"]),
+            # 数据增强：用 DEFAULTS 兜底，兼容"缺这几个字段"的旧参数记录
+            "--mosaic", str(params.get("mosaic", DEFAULTS["mosaic"])),
+            "--mixup", str(params.get("mixup", DEFAULTS["mixup"])),
+            "--copy-paste", str(params.get("copy_paste", DEFAULTS["copy_paste"])),
         ]
 
         try:

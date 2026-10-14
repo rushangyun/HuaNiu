@@ -57,6 +57,14 @@ class TrainConfig:
     weight_decay: float = 0.0005
     warmup_epochs: float = 3.0
 
+    # --- 数据增强（可搜索；默认值与 ultralytics 保持一致）---
+    # 这三个是 EXCLUSIONS 里点名的"真正有效方向"之一。
+    # 注意 ultralytics 默认 mosaic=1.0（不是 0）、mixup=0.0、copy_paste=0.0，
+    # 所以"关掉增强"是 mosaic=0.0，别照抄别的框架默认值。
+    mosaic: float = 1.0
+    mixup: float = 0.0
+    copy_paste: float = 0.0
+
     # --- 工程参数 ---
     workers: int = 2           # Windows 上开太大容易卡住数据加载
     patience: int = 20         # 多少轮没提升就早停
@@ -108,7 +116,8 @@ def train(cfg: TrainConfig) -> dict:
         "hyperparams": {
             k: v for k, v in asdict(cfg).items()
             if k in ("epochs", "imgsz", "batch", "lr0", "lrf", "momentum",
-                     "weight_decay", "warmup_epochs", "model")
+                     "weight_decay", "warmup_epochs", "model",
+                     "mosaic", "mixup", "copy_paste")
         },
         "metrics": {},
         "wall_time_sec": 0.0,
@@ -134,6 +143,9 @@ def train(cfg: TrainConfig) -> dict:
                 momentum=cfg.momentum,
                 weight_decay=cfg.weight_decay,
                 warmup_epochs=cfg.warmup_epochs,
+                mosaic=cfg.mosaic,
+                mixup=cfg.mixup,
+                copy_paste=cfg.copy_paste,
                 device=cfg.device,
                 workers=cfg.workers,
                 patience=cfg.patience,
@@ -239,6 +251,9 @@ def parse_args() -> TrainConfig:
     p.add_argument("--momentum", type=float, default=d.momentum)
     p.add_argument("--weight-decay", type=float, default=d.weight_decay)
     p.add_argument("--warmup-epochs", type=float, default=d.warmup_epochs)
+    p.add_argument("--mosaic", type=float, default=d.mosaic)
+    p.add_argument("--mixup", type=float, default=d.mixup)
+    p.add_argument("--copy-paste", type=float, default=d.copy_paste)
     p.add_argument("--workers", type=int, default=d.workers)
     p.add_argument("--patience", type=int, default=d.patience)
     p.add_argument("--name", default=d.name)
